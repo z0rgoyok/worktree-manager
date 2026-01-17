@@ -154,9 +154,131 @@ final class GitService {
         }
     }
 
+    // MARK: - Status Operations
+
+    /// Get worktree status (ahead/behind, dirty, remote tracking)
+    func getWorktreeStatus(at worktreePath: String) -> WorktreeStatus {
+        // Check if dirty (uncommitted changes)
+        let statusResult = run("git", args: ["-C", worktreePath, "status", "--porcelain"])
+        let isDirty = !statusResult.output.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+
+        // Get current branch
+        let branchResult = run("git", args: ["-C", worktreePath, "branch", "--show-current"])
+        let branch = branchResult.output.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        // Check if has remote tracking branch
+        let trackingResult = run("git", args: ["-C", worktreePath, "rev-parse", "--abbrev-ref", "\(branch)@{upstream}"])
+        let hasRemote = trackingResult.exitCode == 0
+
+        var ahead = 0
+        var behind = 0
+
+        if hasRemote {
+            // Get ahead/behind counts
+            let revListResult = run("git", args: ["-C", worktreePath, "rev-list", "--left-right", "--count", "\(branch)@{upstream}...\(branch)"])
+            if revListResult.exitCode == 0 {
+                let parts = revListResult.output.trimmingCharacters(in: .whitespacesAndNewlines).split(separator: "\t")
+                if parts.count == 2 {
+                    behind = Int(parts[0]) ?? 0
+                    ahead = Int(parts[1]) ?? 0
+                }
+            }
+        }
+
+        // Check for PR status
+        let prStatus = getPRStatus(at: worktreePath, branch: branch)
+
+        return WorktreeStatus(
+            isDirty: isDirty,
+            hasRemote: hasRemote,
+            ahead: ahead,
+            behind: behind,
+            prStatus: prStatus
+        )
+    }
+
+    /// Get PR status for a branch
+    func getPRStatus(at worktreePath: String, branch: String) -> PRStatus? {
+        let result = run("gh", args: ["pr", "view", branch, "--json", "number,state,url,title", "-R", "."], workingDirectory: worktreePath)
+
+        guard result.exitCode == 0 else { return nil }
+
+        // Parse JSON response
+        guard let data = result.output.data(using: .utf8),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let number = json["number"] as? Int,
+              let state = json["state"] as? String,
+              let url = json["url"] as? String else {
+            return nil
+        }
+
+        return PRStatus(
+            number: number,
+            state: state,
+            url: url,
+            title: json["title"] as? String
+        )
+    }
+
+    // MARK: - Push/PR/Merge Operations
+
+    /// Push current branch to remote
+    func push(at worktreePath: String, setUpstream: Bool = false) throws {
+        var args = ["-C", worktreePath, "push"]
+        if setUpstream {
+            args.append("-u")
+            args.append("origin")
+            args.append("HEAD")
+        }
+
+        let result = run("git", args: args)
+        guard result.exitCode == 0 else {
+            throw GitError.commandFailed(message: result.error)
+        }
+    }
+
+    /// Create a pull request using gh CLI
+    func createPR(at worktreePath: String, title: String, body: String, baseBranch: String?) throws -> String {
+        var args = ["pr", "create", "--title", title, "--body", body]
+        if let base = baseBranch {
+            args.append("--base")
+            args.append(base)
+        }
+
+        let result = run("gh", args: args, workingDirectory: worktreePath)
+        guard result.exitCode == 0 else {
+            throw GitError.commandFailed(message: result.error.isEmpty ? result.output : result.error)
+        }
+
+        return result.output.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// Merge a branch into another
+    func mergeBranch(at repoPath: String, source: String, into target: String) throws {
+        // First checkout target
+        let checkoutResult = run("git", args: ["-C", repoPath, "checkout", target])
+        guard checkoutResult.exitCode == 0 else {
+            throw GitError.commandFailed(message: checkoutResult.error)
+        }
+
+        // Then merge source
+        let mergeResult = run("git", args: ["-C", repoPath, "merge", source, "--no-edit"])
+        guard mergeResult.exitCode == 0 else {
+            throw GitError.commandFailed(message: mergeResult.error)
+        }
+    }
+
+    /// Fetch from remote
+    func fetch(at worktreePath: String) throws {
+        let result = run("git", args: ["-C", worktreePath, "fetch"])
+        guard result.exitCode == 0 else {
+            throw GitError.commandFailed(message: result.error)
+        }
+    }
+
     // MARK: - Private Helpers
 
-    private func run(_ command: String, args: [String]) -> ProcessResult {
+    private func run(_ command: String, args: [String], workingDirectory: String? = nil) -> ProcessResult {
         let process = Process()
         let outputPipe = Pipe()
         let errorPipe = Pipe()
@@ -165,6 +287,10 @@ final class GitService {
         process.arguments = [command] + args
         process.standardOutput = outputPipe
         process.standardError = errorPipe
+
+        if let wd = workingDirectory {
+            process.currentDirectoryURL = URL(fileURLWithPath: wd)
+        }
 
         do {
             try process.run()

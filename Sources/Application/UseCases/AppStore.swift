@@ -9,6 +9,7 @@ final class AppStore: ObservableObject {
     @Published var repositories: [Repository] = []
     @Published var selectedRepository: Repository?
     @Published var worktrees: [Worktree] = []
+    @Published var worktreeStatuses: [String: WorktreeStatus] = [:]  // path -> status
     @Published var branches: [String] = []
     @Published var isLoading = false
     @Published var error: String?
@@ -125,6 +126,7 @@ final class AppStore: ObservableObject {
         }
 
         updateWatchedPaths()
+        refreshAllStatuses()
     }
 
     func loadBranches(for repo: Repository? = nil) {
@@ -341,6 +343,128 @@ final class AppStore: ObservableObject {
 
     func availableEditors() -> [Editor] {
         editorService.availableEditors()
+    }
+
+    // MARK: - Status Use Cases
+
+    func refreshWorktreeStatus(_ worktree: Worktree) {
+        guard !worktree.isPrunable else {
+            worktreeStatuses[worktree.path] = nil
+            return
+        }
+
+        Task.detached { [git] in
+            let status = git.getWorktreeStatus(at: worktree.path)
+            await MainActor.run { [weak self] in
+                self?.worktreeStatuses[worktree.path] = status
+            }
+        }
+    }
+
+    func refreshAllStatuses() {
+        for worktree in worktrees where !worktree.isPrunable {
+            refreshWorktreeStatus(worktree)
+        }
+    }
+
+    func getStatus(for worktree: Worktree) -> WorktreeStatus? {
+        worktreeStatuses[worktree.path]
+    }
+
+    // MARK: - Git Actions
+
+    func push(_ worktree: Worktree) {
+        isLoading = true
+
+        Task {
+            defer {
+                Task { @MainActor in
+                    isLoading = false
+                }
+            }
+
+            do {
+                let status = git.getWorktreeStatus(at: worktree.path)
+                try git.push(at: worktree.path, setUpstream: !status.hasRemote)
+
+                await MainActor.run {
+                    refreshWorktreeStatus(worktree)
+                }
+            } catch {
+                await MainActor.run {
+                    showError(message: error.localizedDescription)
+                }
+            }
+        }
+    }
+
+    func createPR(_ worktree: Worktree, title: String, body: String, baseBranch: String?) {
+        isLoading = true
+
+        Task {
+            defer {
+                Task { @MainActor in
+                    isLoading = false
+                }
+            }
+
+            do {
+                // Push first if needed
+                let status = git.getWorktreeStatus(at: worktree.path)
+                if status.hasUnpushedCommits || !status.hasRemote {
+                    try git.push(at: worktree.path, setUpstream: !status.hasRemote)
+                }
+
+                let prUrl = try git.createPR(at: worktree.path, title: title, body: body, baseBranch: baseBranch)
+
+                await MainActor.run {
+                    refreshWorktreeStatus(worktree)
+                    // Open PR in browser
+                    if let url = URL(string: prUrl) {
+                        NSWorkspace.shared.open(url)
+                    }
+                }
+            } catch {
+                await MainActor.run {
+                    showError(message: error.localizedDescription)
+                }
+            }
+        }
+    }
+
+    func openPR(_ worktree: Worktree) {
+        guard let status = worktreeStatuses[worktree.path],
+              let prStatus = status.prStatus,
+              let url = URL(string: prStatus.url) else {
+            return
+        }
+        NSWorkspace.shared.open(url)
+    }
+
+    func mergeBranch(_ worktree: Worktree, into targetBranch: String) {
+        guard let repo = selectedRepository else { return }
+
+        isLoading = true
+
+        Task {
+            defer {
+                Task { @MainActor in
+                    isLoading = false
+                }
+            }
+
+            do {
+                try git.mergeBranch(at: repo.path, source: worktree.branch, into: targetBranch)
+
+                await MainActor.run {
+                    refreshWorktrees(for: repo)
+                }
+            } catch {
+                await MainActor.run {
+                    showError(message: error.localizedDescription)
+                }
+            }
+        }
     }
 
     // MARK: - Error Handling
