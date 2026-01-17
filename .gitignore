@@ -1,0 +1,23 @@
+# Swift / Swift Package Manager
+.build/
+Packages/
+Package.resolved
+.swiftpm/
+xcuserdata/
+
+# macOS
+.DS_Store
+*.swp
+*.lock
+
+# Python (Icon Generation)
+.venv/
+__pycache__/
+*.py[cod]
+*$py.class
+icon_generated.png
+icon_transparent.png
+AppIcon.iconset/
+
+# App Bundle (Build artifacts)
+WorktreeManager.app/
