@@ -73,7 +73,7 @@ struct WorktreeCard: View {
                         if worktree.isMain {
                             HStack(spacing: 2) {
                                 Badge(text: "primary", color: .blue)
-                                InfoButton(message: "This is the primary worktree created with the repository. It cannot be removed.")
+                                WorktreeInfoButton()
                             }
                         }
 
@@ -229,8 +229,7 @@ struct Badge: View {
     }
 }
 
-struct InfoButton: View {
-    let message: String
+struct WorktreeInfoButton: View {
     @State private var showPopover = false
 
     var body: some View {
@@ -243,10 +242,51 @@ struct InfoButton: View {
         }
         .buttonStyle(.plain)
         .popover(isPresented: $showPopover, arrowEdge: .bottom) {
-            Text(message)
+            VStack(alignment: .leading, spacing: 12) {
+                Text("What is a Worktree?")
+                    .font(.headline)
+
+                Text("Git worktree allows you to have multiple working directories attached to a single repository. Each worktree can have a different branch checked out.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                Divider()
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Label {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("primary").fontWeight(.medium)
+                            Text("The main worktree created with the repository. Cannot be removed.")
+                                .foregroundStyle(.secondary)
+                        }
+                    } icon: {
+                        Badge(text: "primary", color: .blue)
+                    }
+
+                    Label {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("locked").fontWeight(.medium)
+                            Text("Protected from accidental removal. Unlock to delete.")
+                                .foregroundStyle(.secondary)
+                        }
+                    } icon: {
+                        Badge(text: "locked", color: .orange)
+                    }
+
+                    Label {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("prunable").fontWeight(.medium)
+                            Text("The worktree directory is missing or corrupt. Can be safely removed.")
+                                .foregroundStyle(.secondary)
+                        }
+                    } icon: {
+                        Badge(text: "prunable", color: .red)
+                    }
+                }
                 .font(.caption)
-                .padding(8)
-                .frame(maxWidth: 200)
+            }
+            .padding(12)
+            .frame(width: 280)
         }
     }
 }
