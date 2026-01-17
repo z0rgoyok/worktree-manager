@@ -3,6 +3,7 @@ import SwiftUI
 struct ContentView: View {
     @EnvironmentObject var store: AppStore
     @State private var showAddWorktree = false
+    @State private var showHelp = false
     @State private var columnVisibility = NavigationSplitViewVisibility.all
 
     var body: some View {
@@ -20,6 +21,13 @@ struct ContentView: View {
         .frame(minWidth: 700, minHeight: 450)
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
+                Button {
+                    showHelp = true
+                } label: {
+                    Label("Help", systemImage: "questionmark.circle")
+                }
+                .help("Show help")
+
                 if store.selectedRepository != nil {
                     Button {
                         showAddWorktree = true
@@ -34,11 +42,15 @@ struct ContentView: View {
                         Label("Refresh", systemImage: "arrow.clockwise")
                     }
                     .help("Refresh worktree list")
+                    .keyboardShortcut("r", modifiers: .command)
                 }
             }
         }
         .sheet(isPresented: $showAddWorktree) {
             AddWorktreeSheet()
+        }
+        .sheet(isPresented: $showHelp) {
+            HelpView()
         }
         .alert("Error", isPresented: $store.showError) {
             Button("OK") {
