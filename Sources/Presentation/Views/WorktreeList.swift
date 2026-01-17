@@ -58,7 +58,7 @@ struct WorktreeList: View {
 struct WorktreeCard: View {
     @EnvironmentObject var store: AppStore
     let worktree: Worktree
-    @State private var showDeleteConfirm = false
+    @State private var showDeleteSheet = false
     @State private var showEditorPicker = false
 
     var body: some View {
@@ -140,7 +140,7 @@ struct WorktreeCard: View {
                             Divider()
 
                             Button(role: .destructive) {
-                                showDeleteConfirm = true
+                                showDeleteSheet = true
                             } label: {
                                 Label("Remove Worktree", systemImage: "trash")
                             }
@@ -191,22 +191,8 @@ struct WorktreeCard: View {
         .sheet(isPresented: $showEditorPicker) {
             EditorPickerSheet(worktree: worktree)
         }
-        .confirmationDialog(
-            "Remove Worktree",
-            isPresented: $showDeleteConfirm,
-            titleVisibility: .visible
-        ) {
-            Button("Remove", role: .destructive) {
-                store.removeWorktree(worktree)
-            }
-
-            Button("Force Remove", role: .destructive) {
-                store.removeWorktree(worktree, force: true)
-            }
-
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("This will remove the worktree at '\(worktree.name)'. The files will be deleted.")
+        .sheet(isPresented: $showDeleteSheet) {
+            DeleteWorktreeSheet(worktree: worktree)
         }
     }
 
@@ -291,6 +277,61 @@ struct WorktreeInfoButton: View {
             .padding(12)
             .frame(width: 280)
         }
+    }
+}
+
+struct DeleteWorktreeSheet: View {
+    @EnvironmentObject var store: AppStore
+    @Environment(\.dismiss) var dismiss
+    let worktree: Worktree
+
+    @State private var deleteBranch = false
+    @State private var forceDelete = false
+
+    private var canDeleteBranch: Bool {
+        !worktree.branch.isEmpty && worktree.branch != "detached HEAD"
+    }
+
+    var body: some View {
+        VStack(spacing: 16) {
+            Image(systemName: "trash")
+                .font(.largeTitle)
+                .foregroundStyle(.red)
+
+            Text("Remove Worktree")
+                .font(.headline)
+
+            Text("This will remove the worktree '\(worktree.name)'.\nThe files will be deleted.")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+
+            VStack(alignment: .leading, spacing: 8) {
+                Toggle("Force remove (ignore unsaved changes)", isOn: $forceDelete)
+
+                if canDeleteBranch {
+                    Toggle("Also delete branch '\(worktree.branch)'", isOn: $deleteBranch)
+                }
+            }
+            .padding(.vertical, 8)
+
+            HStack(spacing: 12) {
+                Button("Cancel") {
+                    dismiss()
+                }
+                .keyboardShortcut(.cancelAction)
+
+                Button("Remove") {
+                    store.removeWorktree(worktree, force: forceDelete, deleteBranch: deleteBranch)
+                    dismiss()
+                }
+                .keyboardShortcut(.defaultAction)
+                .buttonStyle(.borderedProminent)
+                .tint(.red)
+            }
+        }
+        .padding(24)
+        .frame(width: 340)
     }
 }
 

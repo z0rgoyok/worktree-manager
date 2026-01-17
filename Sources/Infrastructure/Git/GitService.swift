@@ -46,6 +46,21 @@ final class GitService {
         return result.output.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    /// Delete a branch
+    func deleteBranch(at repoPath: String, branch: String, force: Bool = false) throws {
+        let flag = force ? "-D" : "-d"
+        let result = run("git", args: ["-C", repoPath, "branch", flag, branch])
+        guard result.exitCode == 0 else {
+            throw GitError.commandFailed(message: result.error)
+        }
+    }
+
+    /// Check if a branch exists
+    func branchExists(at repoPath: String, branch: String) -> Bool {
+        let result = run("git", args: ["-C", repoPath, "show-ref", "--verify", "--quiet", "refs/heads/\(branch)"])
+        return result.exitCode == 0
+    }
+
     // MARK: - Worktree Operations
 
     /// List all worktrees for a repository

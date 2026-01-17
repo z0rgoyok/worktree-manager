@@ -188,12 +188,13 @@ final class AppStore: ObservableObject {
         }
     }
 
-    func removeWorktree(_ worktree: Worktree, force: Bool = false) {
+    func branchExists(_ branch: String) -> Bool {
+        guard let repo = selectedRepository else { return false }
+        return git.branchExists(at: repo.path, branch: branch)
+    }
+
+    func recreateBranchAndWorktree(name: String, branch: String, baseBranch: String) {
         guard let repo = selectedRepository else { return }
-        guard !worktree.isMain else {
-            showError(message: "Cannot remove the main worktree")
-            return
-        }
 
         isLoading = true
 
@@ -205,10 +206,69 @@ final class AppStore: ObservableObject {
             }
 
             do {
-                try git.removeWorktree(at: repo.path, worktreePath: worktree.path, force: force)
+                // Delete existing branch first
+                try git.deleteBranch(at: repo.path, branch: branch, force: true)
+
+                // Determine worktree path
+                let basePath = storage.worktreeBasePath
+                let repoName = repo.name
+                let worktreePath = "\(basePath)/\(repoName)/\(name)"
+
+                // Create base directory if needed
+                try FileManager.default.createDirectory(
+                    atPath: "\(basePath)/\(repoName)",
+                    withIntermediateDirectories: true
+                )
+
+                // Create worktree with new branch
+                try git.createWorktree(
+                    at: repo.path,
+                    worktreePath: worktreePath,
+                    branch: branch,
+                    createBranch: true,
+                    baseBranch: baseBranch
+                )
 
                 await MainActor.run {
                     refreshWorktrees(for: repo)
+                    loadBranches(for: repo)
+                }
+            } catch {
+                await MainActor.run {
+                    showError(message: error.localizedDescription)
+                }
+            }
+        }
+    }
+
+    func removeWorktree(_ worktree: Worktree, force: Bool = false, deleteBranch: Bool = false) {
+        guard let repo = selectedRepository else { return }
+        guard !worktree.isMain else {
+            showError(message: "Cannot remove the main worktree")
+            return
+        }
+
+        isLoading = true
+        let branchToDelete = deleteBranch ? worktree.branch : nil
+
+        Task {
+            defer {
+                Task { @MainActor in
+                    isLoading = false
+                }
+            }
+
+            do {
+                try git.removeWorktree(at: repo.path, worktreePath: worktree.path, force: force)
+
+                // Delete branch if requested
+                if let branch = branchToDelete, !branch.isEmpty && branch != "detached HEAD" {
+                    try? git.deleteBranch(at: repo.path, branch: branch, force: force)
+                }
+
+                await MainActor.run {
+                    refreshWorktrees(for: repo)
+                    loadBranches(for: repo)
                 }
             } catch {
                 await MainActor.run {
