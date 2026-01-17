@@ -19,11 +19,40 @@ final class AppStore: ObservableObject {
     private let git = GitService.shared
     private let storage = StorageService.shared
     private let editorService = EditorService.shared
+    private let watcher = FileSystemWatcher()
 
     // MARK: - Initialization
 
     init() {
+        setupFileSystemWatcher()
         loadRepositories()
+    }
+
+    private func setupFileSystemWatcher() {
+        watcher.setChangeHandler { [weak self] in
+            self?.refreshWorktrees()
+        }
+    }
+
+    private func updateWatchedPaths() {
+        var paths = Set<String>()
+
+        let basePath = storage.worktreeBasePath
+
+        // Always watch the worktree base path if it exists
+        if FileManager.default.fileExists(atPath: basePath) {
+            paths.insert(basePath)
+        }
+
+        // Watch .git/worktrees directory in the repository itself
+        if let repo = selectedRepository {
+            let gitWorktreesPath = "\(repo.path)/.git/worktrees"
+            if FileManager.default.fileExists(atPath: gitWorktreesPath) {
+                paths.insert(gitWorktreesPath)
+            }
+        }
+
+        watcher.updateWatchedPaths(paths)
     }
 
     // MARK: - Repository Use Cases
@@ -94,6 +123,8 @@ final class AppStore: ObservableObject {
             showError(message: error.localizedDescription)
             worktrees = []
         }
+
+        updateWatchedPaths()
     }
 
     func loadBranches(for repo: Repository? = nil) {
