@@ -1,7 +1,7 @@
 import Foundation
 
 /// Status information for a worktree
-struct WorktreeStatus {
+struct WorktreeStatus: Equatable {
     let isDirty: Bool
     let hasRemote: Bool
     let ahead: Int
@@ -44,7 +44,7 @@ struct WorktreeStatus {
 }
 
 /// Pull request status
-struct PRStatus {
+struct PRStatus: Equatable {
     let number: Int
     let state: String  // OPEN, CLOSED, MERGED
     let url: String

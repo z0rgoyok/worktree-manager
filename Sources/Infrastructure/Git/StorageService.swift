@@ -7,6 +7,7 @@ final class StorageService {
     private let defaults = UserDefaults.standard
     private let repositoriesKey = "savedRepositories"
     private let defaultEditorKey = "defaultEditor"
+    private let defaultEditorIdKey = "defaultEditorId"
     private let worktreeBasePathKey = "worktreeBasePath"
 
     private init() {}
@@ -43,6 +44,18 @@ final class StorageService {
             } else {
                 defaults.removeObject(forKey: defaultEditorKey)
             }
+        }
+    }
+
+    var defaultEditorId: String {
+        get {
+            if let id = defaults.string(forKey: defaultEditorIdKey) {
+                return id
+            }
+            return defaultEditor?.id ?? ""
+        }
+        set {
+            defaults.set(newValue, forKey: defaultEditorIdKey)
         }
     }
 

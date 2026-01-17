@@ -13,6 +13,11 @@ let package = Package(
         .executableTarget(
             name: "WorktreeManager",
             path: "Sources"
+        ),
+        .testTarget(
+            name: "WorktreeManagerTests",
+            dependencies: ["WorktreeManager"],
+            path: "Tests"
         )
     ]
 )

@@ -37,7 +37,7 @@ struct ContentView: View {
                     .help("Create new worktree")
 
                     Button {
-                        store.refreshWorktrees()
+                        Task { await store.refreshWorktrees() }
                     } label: {
                         Label("Refresh", systemImage: "arrow.clockwise")
                     }

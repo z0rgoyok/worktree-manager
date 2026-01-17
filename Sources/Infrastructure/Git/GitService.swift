@@ -369,7 +369,13 @@ final class GitService {
             ))
         }
 
-        return worktrees
+        // Sort for stable UI order: main first, then alphabetically by name
+        return worktrees.sorted { lhs, rhs in
+            if lhs.isMain != rhs.isMain {
+                return lhs.isMain
+            }
+            return lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending
+        }
     }
 }
 

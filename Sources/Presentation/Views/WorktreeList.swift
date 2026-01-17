@@ -252,7 +252,7 @@ struct ActionButtons: View {
             if !worktree.isMain && !worktree.isPrunable {
                 // Push button
                 Button {
-                    store.push(worktree)
+                    Task { await store.push(worktree) }
                 } label: {
                     Label("Push", systemImage: "arrow.up")
                 }
@@ -336,7 +336,7 @@ struct MoreMenu: View {
 
             Section {
                 Button {
-                    store.refreshWorktreeStatus(worktree)
+                    Task { await store.refreshWorktreeStatus(worktree) }
                 } label: {
                     Label("Refresh Status", systemImage: "arrow.clockwise")
                 }
@@ -354,13 +354,13 @@ struct MoreMenu: View {
                 Section {
                     if worktree.isLocked {
                         Button {
-                            store.unlockWorktree(worktree)
+                            Task { await store.unlockWorktree(worktree) }
                         } label: {
                             Label("Unlock", systemImage: "lock.open")
                         }
                     } else {
                         Button {
-                            store.lockWorktree(worktree)
+                            Task { await store.lockWorktree(worktree) }
                         } label: {
                             Label("Lock", systemImage: "lock")
                         }
@@ -444,7 +444,7 @@ struct FinishWorktreeSheet: View {
                 .keyboardShortcut(.cancelAction)
 
                 Button("Finish") {
-                    store.removeWorktree(worktree, force: false, deleteBranch: deleteBranch)
+                    Task { await store.removeWorktree(worktree, force: false, deleteBranch: deleteBranch) }
                     dismiss()
                 }
                 .keyboardShortcut(.defaultAction)
@@ -499,7 +499,7 @@ struct DeleteWorktreeSheet: View {
                 .keyboardShortcut(.cancelAction)
 
                 Button("Remove") {
-                    store.removeWorktree(worktree, force: forceDelete, deleteBranch: deleteBranch)
+                    Task { await store.removeWorktree(worktree, force: forceDelete, deleteBranch: deleteBranch) }
                     dismiss()
                 }
                 .keyboardShortcut(.defaultAction)
@@ -568,12 +568,14 @@ struct CreatePRSheet: View {
                 .keyboardShortcut(.cancelAction)
 
                 Button("Create PR") {
-                    store.createPR(
-                        worktree,
-                        title: title.isEmpty ? worktree.branch : title,
-                        body: prDescription,
-                        baseBranch: baseBranch
-                    )
+                    Task {
+                        await store.createPR(
+                            worktree,
+                            title: title.isEmpty ? worktree.branch : title,
+                            body: prDescription,
+                            baseBranch: baseBranch
+                        )
+                    }
                     dismiss()
                 }
                 .keyboardShortcut(.defaultAction)

@@ -44,7 +44,7 @@ struct AddWorktreeSheet: View {
                 }
 
                 if let repo = store.selectedRepository {
-                    let previewPath = "\(StorageService.shared.worktreeBasePath)/\(repo.name)/\(worktreeName)"
+                    let previewPath = "\(store.worktreeBasePath)/\(repo.name)/\(worktreeName)"
 
                     LabeledContent("Location") {
                         Text(previewPath)
@@ -95,21 +95,25 @@ struct AddWorktreeSheet: View {
                 worktreeName: worktreeName,
                 onUseExisting: {
                     // Use existing branch without creating new
-                    store.createWorktree(
-                        name: worktreeName,
-                        branch: branchName,
-                        createNewBranch: false,
-                        baseBranch: nil
-                    )
+                    Task {
+                        await store.createWorktree(
+                            name: worktreeName,
+                            branch: branchName,
+                            createNewBranch: false,
+                            baseBranch: nil
+                        )
+                    }
                     dismiss()
                 },
                 onRecreate: {
                     // Delete branch and create new
-                    store.recreateBranchAndWorktree(
-                        name: worktreeName,
-                        branch: branchName,
-                        baseBranch: baseBranch
-                    )
+                    Task {
+                        await store.recreateBranchAndWorktree(
+                            name: worktreeName,
+                            branch: branchName,
+                            baseBranch: baseBranch
+                        )
+                    }
                     dismiss()
                 }
             )
@@ -149,12 +153,14 @@ struct AddWorktreeSheet: View {
         let branch = createNewBranch ? branchName : selectedExistingBranch
         let base = createNewBranch ? baseBranch : nil
 
-        store.createWorktree(
-            name: worktreeName,
-            branch: branch,
-            createNewBranch: createNewBranch,
-            baseBranch: base
-        )
+        Task {
+            await store.createWorktree(
+                name: worktreeName,
+                branch: branch,
+                createNewBranch: createNewBranch,
+                baseBranch: base
+            )
+        }
 
         dismiss()
     }

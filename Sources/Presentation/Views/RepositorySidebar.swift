@@ -9,7 +9,7 @@ struct RepositorySidebar: View {
             get: { store.selectedRepository },
             set: { repo in
                 if let repo = repo {
-                    store.selectRepository(repo)
+                    Task { await store.selectRepository(repo) }
                 }
             }
         )) {
@@ -25,7 +25,7 @@ struct RepositorySidebar: View {
                             Divider()
 
                             Button("Remove from List", role: .destructive) {
-                                store.removeRepository(repo)
+                                Task { await store.removeRepository(repo) }
                             }
                         }
                 }
@@ -99,7 +99,7 @@ struct AddRepositorySheet: View {
                 Spacer()
 
                 Button("Add") {
-                    store.addRepository(at: path)
+                    Task { await store.addRepository(at: path) }
                     dismiss()
                 }
                 .keyboardShortcut(.defaultAction)

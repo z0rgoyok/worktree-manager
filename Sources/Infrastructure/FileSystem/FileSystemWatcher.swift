@@ -5,18 +5,19 @@ import CoreServices
 final class FileSystemWatcher {
     private var stream: FSEventStreamRef?
     private var watchedPaths: Set<String> = []
-    private var onChange: (() -> Void)?
+    private var onChange: ((Set<String>) -> Void)?
 
     /// Debounce mechanism to avoid multiple rapid callbacks
     private var debounceWorkItem: DispatchWorkItem?
     private let debounceInterval: TimeInterval = 0.3
+    private var pendingChangedPaths: Set<String> = []
 
     deinit {
         stop()
     }
 
     /// Sets the callback to invoke when any watched directory changes
-    func setChangeHandler(_ handler: @escaping () -> Void) {
+    func setChangeHandler(_ handler: @escaping (Set<String>) -> Void) {
         self.onChange = handler
     }
 
@@ -56,7 +57,7 @@ final class FileSystemWatcher {
         ) in
             guard let info = clientCallbackInfo else { return }
             let watcher = Unmanaged<FileSystemWatcher>.fromOpaque(info).takeUnretainedValue()
-            watcher.handleChange()
+            watcher.handleChange(eventPaths: eventPaths)
         }
 
         stream = FSEventStreamCreate(
@@ -83,15 +84,23 @@ final class FileSystemWatcher {
         FSEventStreamRelease(stream)
         self.stream = nil
         debounceWorkItem?.cancel()
+        pendingChangedPaths.removeAll()
     }
 
-    private func handleChange() {
+    private func handleChange(eventPaths: UnsafeMutableRawPointer?) {
+        if let paths = extractPaths(eventPaths: eventPaths) {
+            pendingChangedPaths.formUnion(paths)
+        }
+
         // Debounce: cancel previous pending callback
         debounceWorkItem?.cancel()
 
         let workItem = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            let changed = self.pendingChangedPaths
+            self.pendingChangedPaths.removeAll()
             DispatchQueue.main.async {
-                self?.onChange?()
+                self.onChange?(changed)
             }
         }
 
@@ -100,5 +109,17 @@ final class FileSystemWatcher {
             deadline: .now() + debounceInterval,
             execute: workItem
         )
+    }
+
+    private func extractPaths(eventPaths: UnsafeMutableRawPointer?) -> Set<String>? {
+        guard let eventPaths else { return nil }
+        // With kFSEventStreamCreateFlagUseCFTypes, eventPaths is a CFArray of CFString.
+        let cfArray = unsafeBitCast(eventPaths, to: CFArray.self)
+        let array = cfArray as NSArray
+        var paths = Set<String>()
+        for case let path as String in array {
+            paths.insert(path)
+        }
+        return paths.isEmpty ? nil : paths
     }
 }

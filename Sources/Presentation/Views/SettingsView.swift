@@ -2,14 +2,18 @@ import SwiftUI
 
 struct SettingsView: View {
     @EnvironmentObject var store: AppStore
-    @AppStorage("worktreeBasePath") private var worktreeBasePath = ""
-    @AppStorage("defaultEditorId") private var defaultEditorId = ""
 
     var body: some View {
         TabView {
             GeneralSettingsView(
-                worktreeBasePath: $worktreeBasePath,
-                defaultEditorId: $defaultEditorId,
+                worktreeBasePath: Binding(
+                    get: { store.worktreeBasePath },
+                    set: { store.setWorktreeBasePath($0) }
+                ),
+                defaultEditorId: Binding(
+                    get: { store.defaultEditorId },
+                    set: { store.setDefaultEditorId($0) }
+                ),
                 availableEditors: store.availableEditors()
             )
             .tabItem {
@@ -17,11 +21,6 @@ struct SettingsView: View {
             }
         }
         .frame(width: 450, height: 300)
-        .onAppear {
-            if worktreeBasePath.isEmpty {
-                worktreeBasePath = StorageService.shared.worktreeBasePath
-            }
-        }
     }
 }
 
@@ -63,9 +62,6 @@ struct GeneralSettingsView: View {
         }
         .formStyle(.grouped)
         .padding()
-        .onChange(of: worktreeBasePath) { _, newValue in
-            StorageService.shared.worktreeBasePath = newValue
-        }
     }
 
     private func selectFolder() {
