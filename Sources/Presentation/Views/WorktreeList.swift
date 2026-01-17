@@ -146,9 +146,12 @@ struct WorktreeCard: View {
                             }
                         }
                     } label: {
-                        Image(systemName: "ellipsis.circle")
+                        Image(systemName: "chevron.down")
+                            .font(.caption)
+                            .fontWeight(.semibold)
                     }
                     .menuStyle(.borderlessButton)
+                    .menuIndicator(.hidden)
                     .frame(width: 24)
                 }
             }
