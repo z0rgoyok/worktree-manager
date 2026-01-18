@@ -276,6 +276,28 @@ final class GitService {
         }
     }
 
+    /// Pull latest changes from remote
+    func pull(at worktreePath: String) throws {
+        let result = run("git", args: ["-C", worktreePath, "pull"])
+        guard result.exitCode == 0 else {
+            throw GitError.commandFailed(message: result.error)
+        }
+    }
+
+    /// Delete a remote branch
+    func deleteRemoteBranch(at repoPath: String, branch: String) throws {
+        let result = run("git", args: ["-C", repoPath, "push", "origin", "--delete", branch])
+        guard result.exitCode == 0 else {
+            throw GitError.commandFailed(message: result.error)
+        }
+    }
+
+    /// Check if a remote branch exists
+    func hasRemoteBranch(at repoPath: String, branch: String) -> Bool {
+        let result = run("git", args: ["-C", repoPath, "ls-remote", "--heads", "origin", branch])
+        return result.exitCode == 0 && !result.output.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
     // MARK: - Private Helpers
 
     private func run(_ command: String, args: [String], workingDirectory: String? = nil) -> ProcessResult {
@@ -285,6 +307,7 @@ final class GitService {
 
         process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
         process.arguments = [command] + args
+        process.environment = CommandEnvironment.forCommandExecution()
         process.standardOutput = outputPipe
         process.standardError = errorPipe
 

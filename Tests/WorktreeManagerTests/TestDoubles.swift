@@ -6,6 +6,7 @@ final class InMemoryPreferencesStore: PreferencesStore {
     var worktreeBasePath: String
     var defaultEditorId: String
     private var preferredBaseBranches: [UUID: String] = [:]
+    private var worktreeBaseBranches: [String: String] = [:]
 
     private(set) var saveRepositoriesCalls: [[Repository]] = []
 
@@ -34,6 +35,18 @@ final class InMemoryPreferencesStore: PreferencesStore {
 
     func setPreferredBaseBranch(_ branch: String, forRepositoryId id: UUID) {
         preferredBaseBranches[id] = branch
+    }
+
+    func worktreeBaseBranch(forWorktreePath path: String) -> String? {
+        worktreeBaseBranches[path]
+    }
+
+    func setWorktreeBaseBranch(_ branch: String, forWorktreePath path: String) {
+        worktreeBaseBranches[path] = branch
+    }
+
+    func removeWorktreeBaseBranch(forWorktreePath path: String) {
+        worktreeBaseBranches.removeValue(forKey: path)
     }
 }
 
@@ -165,6 +178,21 @@ final class FakeGitClient: GitClient {
     func mergeBranch(at repoPath: String, source: String, into target: String) throws {
         mergedBranches.append((repoPath: repoPath, source: source, target: target))
         try mergeBranchHandler(repoPath, source, target)
+    }
+
+    var pullHandler: (String) throws -> Void = { _ in }
+    func pull(at worktreePath: String) throws {
+        try pullHandler(worktreePath)
+    }
+
+    var deleteRemoteBranchHandler: (String, String) throws -> Void = { _, _ in }
+    func deleteRemoteBranch(at repoPath: String, branch: String) throws {
+        try deleteRemoteBranchHandler(repoPath, branch)
+    }
+
+    var hasRemoteBranchResult: Bool = true
+    func hasRemoteBranch(at repoPath: String, branch: String) -> Bool {
+        hasRemoteBranchResult
     }
 }
 

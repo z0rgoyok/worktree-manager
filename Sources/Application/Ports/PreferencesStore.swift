@@ -9,5 +9,9 @@ protocol PreferencesStore {
 
     func preferredBaseBranch(forRepositoryId id: UUID) -> String?
     func setPreferredBaseBranch(_ branch: String, forRepositoryId id: UUID)
+
+    func worktreeBaseBranch(forWorktreePath path: String) -> String?
+    func setWorktreeBaseBranch(_ branch: String, forWorktreePath path: String)
+    func removeWorktreeBaseBranch(forWorktreePath path: String)
 }
 

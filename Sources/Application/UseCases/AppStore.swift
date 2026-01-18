@@ -146,8 +146,12 @@ final class AppStore: ObservableObject {
 
         do {
             let listedWorktrees = try await runIO { try self.git.listWorktrees(at: repo.path) }
-            if listedWorktrees != worktrees {
-                worktrees = listedWorktrees
+            let enrichedWorktrees = listedWorktrees.map { worktree in
+                let baseBranch = preferences.worktreeBaseBranch(forWorktreePath: worktree.path)
+                return worktree.withBaseBranch(baseBranch)
+            }
+            if enrichedWorktrees != worktrees {
+                worktrees = enrichedWorktrees
             }
         } catch {
             showError(message: error.localizedDescription)
@@ -207,6 +211,10 @@ final class AppStore: ObservableObject {
                 )
             }
 
+            if let baseBranch {
+                preferences.setWorktreeBaseBranch(baseBranch, forWorktreePath: worktreePath)
+            }
+
             await refreshWorktrees(for: repo)
             await loadBranches(for: repo)
         } catch {
@@ -244,6 +252,8 @@ final class AppStore: ObservableObject {
                 )
             }
 
+            preferences.setWorktreeBaseBranch(baseBranch, forWorktreePath: worktreePath)
+
             await refreshWorktrees(for: repo)
             await loadBranches(for: repo)
         } catch {
@@ -265,6 +275,8 @@ final class AppStore: ObservableObject {
         do {
             try await runIO { try self.git.removeWorktree(at: repo.path, worktreePath: worktree.path, force: force) }
 
+            preferences.removeWorktreeBaseBranch(forWorktreePath: worktree.path)
+
             if let branch = branchToDelete, !branch.isEmpty && branch != "detached HEAD" {
                 try? await runIO { try self.git.deleteBranch(at: repo.path, branch: branch, force: force) }
             }
@@ -274,6 +286,60 @@ final class AppStore: ObservableObject {
         } catch {
             showError(message: error.localizedDescription)
         }
+    }
+
+    /// Complete worktree with all cleanup options
+    func completeWorktree(_ worktree: Worktree, options: CompleteWorktreeOptions) async {
+        guard let repo = selectedRepository else { return }
+        guard !worktree.isMain else {
+            showError(message: GitError.cannotRemoveMainWorktree.localizedDescription)
+            return
+        }
+
+        isLoading = true
+        defer { isLoading = false }
+
+        do {
+            // Step 1: Merge into target branch if requested
+            if options.mergeIntoTarget {
+                try await runIO { try self.git.mergeBranch(at: repo.path, source: worktree.branch, into: options.targetBranch) }
+            }
+
+            // Step 2: Pull latest changes to target branch if requested
+            if options.pullTargetFirst {
+                // Find worktree for target branch to pull there
+                let worktrees = try await runIO { try self.git.listWorktrees(at: repo.path) }
+                if let targetWorktree = worktrees.first(where: { $0.branch == options.targetBranch }) {
+                    try await runIO { try self.git.pull(at: targetWorktree.path) }
+                }
+            }
+
+            // Step 3: Remove the worktree directory
+            try await runIO { try self.git.removeWorktree(at: repo.path, worktreePath: worktree.path, force: options.force) }
+
+            preferences.removeWorktreeBaseBranch(forWorktreePath: worktree.path)
+
+            // Step 4: Delete local branch if requested
+            if options.deleteLocalBranch && !worktree.branch.isEmpty && worktree.branch != "detached HEAD" {
+                try? await runIO { try self.git.deleteBranch(at: repo.path, branch: worktree.branch, force: options.force) }
+            }
+
+            // Step 5: Delete remote branch if requested
+            if options.deleteRemoteBranch && !worktree.branch.isEmpty {
+                try? await runIO { try self.git.deleteRemoteBranch(at: repo.path, branch: worktree.branch) }
+            }
+
+            await refreshWorktrees(for: repo)
+            await loadBranches(for: repo)
+        } catch {
+            showError(message: error.localizedDescription)
+        }
+    }
+
+    /// Check if remote branch exists for a worktree
+    func hasRemoteBranch(for worktree: Worktree) -> Bool {
+        guard let repo = selectedRepository else { return false }
+        return git.hasRemoteBranch(at: repo.path, branch: worktree.branch)
     }
 
     func lockWorktree(_ worktree: Worktree) async {

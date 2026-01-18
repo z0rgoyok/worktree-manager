@@ -134,10 +134,10 @@ struct HelpView: View {
                         description: "Open existing pull request in browser"
                     )
                     ButtonExplanation(
-                        label: "Finish",
+                        label: "Complete",
                         icon: "checkmark.circle",
                         style: .prominentGreen,
-                        description: "Clean up worktree after PR is merged. Deletes worktree and optionally the branch."
+                        description: "Complete worktree: cleanup after PR merge, merge locally, or discard. Options to delete local/remote branches."
                     )
                     ButtonExplanation(
                         label: "Open",
@@ -155,8 +155,7 @@ struct HelpView: View {
                     MenuItemExplanation(icon: "terminal", title: "Open in Terminal", description: "Open Terminal at worktree path")
                     MenuItemExplanation(icon: "arrow.clockwise", title: "Refresh Status", description: "Reload git status for this worktree")
                     MenuItemExplanation(icon: "lock", title: "Lock / Unlock", description: "Lock prevents 'git worktree remove' and 'git worktree prune' from deleting this worktree. Useful when worktree is on external drive or network share that may be temporarily unavailable.")
-                    MenuItemExplanation(icon: "checkmark.circle", title: "Finish & Cleanup", description: "Remove worktree and delete branch")
-                    MenuItemExplanation(icon: "trash", title: "Remove Worktree", description: "Delete worktree with options")
+                    MenuItemExplanation(icon: "checkmark.circle", title: "Complete Worktree", description: "Finish work: merge locally, cleanup after PR, or discard. Delete local/remote branches.")
                 }
 
                 Divider()

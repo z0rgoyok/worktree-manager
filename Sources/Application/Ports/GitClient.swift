@@ -23,7 +23,10 @@ protocol GitClient {
     func getWorktreeStatus(at worktreePath: String) -> WorktreeStatus
 
     func push(at worktreePath: String, setUpstream: Bool) throws
+    func pull(at worktreePath: String) throws
     func createPR(at worktreePath: String, title: String, body: String, baseBranch: String?) throws -> String
     func mergeBranch(at repoPath: String, source: String, into target: String) throws
+    func deleteRemoteBranch(at repoPath: String, branch: String) throws
+    func hasRemoteBranch(at repoPath: String, branch: String) -> Bool
 }
 

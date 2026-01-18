@@ -10,6 +10,7 @@ final class StorageService {
     private let defaultEditorIdKey = "defaultEditorId"
     private let worktreeBasePathKey = "worktreeBasePath"
     private let preferredBaseBranchesKey = "preferredBaseBranches"
+    private let worktreeBaseBranchesKey = "worktreeBaseBranches"
 
     private init() {}
 
@@ -87,5 +88,24 @@ final class StorageService {
         var dict = defaults.dictionary(forKey: preferredBaseBranchesKey) as? [String: String] ?? [:]
         dict[id.uuidString] = branch
         defaults.set(dict, forKey: preferredBaseBranchesKey)
+    }
+
+    // MARK: - Worktree Base Branches
+
+    func worktreeBaseBranch(forWorktreePath path: String) -> String? {
+        let dict = defaults.dictionary(forKey: worktreeBaseBranchesKey) as? [String: String] ?? [:]
+        return dict[path]
+    }
+
+    func setWorktreeBaseBranch(_ branch: String, forWorktreePath path: String) {
+        var dict = defaults.dictionary(forKey: worktreeBaseBranchesKey) as? [String: String] ?? [:]
+        dict[path] = branch
+        defaults.set(dict, forKey: worktreeBaseBranchesKey)
+    }
+
+    func removeWorktreeBaseBranch(forWorktreePath path: String) {
+        var dict = defaults.dictionary(forKey: worktreeBaseBranchesKey) as? [String: String] ?? [:]
+        dict.removeValue(forKey: path)
+        defaults.set(dict, forKey: worktreeBaseBranchesKey)
     }
 }
