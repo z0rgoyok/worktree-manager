@@ -3,6 +3,7 @@ import SwiftUI
 struct RepositorySidebar: View {
     @EnvironmentObject var store: AppStore
     @State private var showAddRepo = false
+    @State private var repositoryForCopySettings: Repository?
 
     var body: some View {
         List(selection: Binding(
@@ -20,6 +21,12 @@ struct RepositorySidebar: View {
                         .contextMenu {
                             Button("Show in Finder") {
                                 NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: repo.path)
+                            }
+
+                            Button {
+                                repositoryForCopySettings = repo
+                            } label: {
+                                Label("Copy Files Settings...", systemImage: "doc.on.doc")
                             }
 
                             Divider()
@@ -44,6 +51,9 @@ struct RepositorySidebar: View {
         }
         .sheet(isPresented: $showAddRepo) {
             AddRepositorySheet()
+        }
+        .sheet(item: $repositoryForCopySettings) { repo in
+            RepositoryCopyPatternsSheet(repository: repo, store: store)
         }
     }
 }

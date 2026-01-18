@@ -5,19 +5,23 @@ final class InMemoryPreferencesStore: PreferencesStore {
     var repositories: [Repository]
     var worktreeBasePath: String
     var defaultEditorId: String
+    var defaultCopyPatterns: [CopyPattern] = []
     private var preferredBaseBranches: [UUID: String] = [:]
     private var worktreeBaseBranches: [String: String] = [:]
+    private var repoCopyPatterns: [UUID: [CopyPattern]] = [:]
 
     private(set) var saveRepositoriesCalls: [[Repository]] = []
 
     init(
         repositories: [Repository] = [],
         worktreeBasePath: String = "/worktrees",
-        defaultEditorId: String = ""
+        defaultEditorId: String = "",
+        defaultCopyPatterns: [CopyPattern] = []
     ) {
         self.repositories = repositories
         self.worktreeBasePath = worktreeBasePath
         self.defaultEditorId = defaultEditorId
+        self.defaultCopyPatterns = defaultCopyPatterns
     }
 
     func loadRepositories() -> [Repository] {
@@ -47,6 +51,22 @@ final class InMemoryPreferencesStore: PreferencesStore {
 
     func removeWorktreeBaseBranch(forWorktreePath path: String) {
         worktreeBaseBranches.removeValue(forKey: path)
+    }
+
+    func copyPatterns(forRepositoryId id: UUID) -> [CopyPattern]? {
+        repoCopyPatterns[id]
+    }
+
+    func setCopyPatterns(_ patterns: [CopyPattern], forRepositoryId id: UUID) {
+        repoCopyPatterns[id] = patterns
+    }
+
+    func removeCopyPatterns(forRepositoryId id: UUID) {
+        repoCopyPatterns.removeValue(forKey: id)
+    }
+
+    func effectiveCopyPatterns(forRepositoryId id: UUID) -> [CopyPattern] {
+        repoCopyPatterns[id] ?? defaultCopyPatterns
     }
 }
 
@@ -248,18 +268,41 @@ final class SpyFileSystemWatcher: FileSystemWatching {
 
 final class FakeFileSystem: FileSystemHandling {
     private(set) var existingPaths: Set<String>
+    private(set) var directoryPaths: Set<String>
     private(set) var createdDirectories: [String] = []
+    private(set) var copiedItems: [(source: String, destination: String)] = []
+    var fileSizes: [String: Int64] = [:]
 
-    init(existingPaths: Set<String> = []) {
+    init(existingPaths: Set<String> = [], directoryPaths: Set<String> = []) {
         self.existingPaths = existingPaths
+        self.directoryPaths = directoryPaths
     }
 
     func fileExists(atPath path: String) -> Bool {
         existingPaths.contains(path)
     }
 
+    func isDirectory(atPath path: String) -> Bool {
+        directoryPaths.contains(path)
+    }
+
     func createDirectory(atPath path: String, withIntermediateDirectories: Bool) throws {
         createdDirectories.append(path)
         existingPaths.insert(path)
+        directoryPaths.insert(path)
+    }
+
+    func copyItem(atPath srcPath: String, toPath dstPath: String) throws {
+        copiedItems.append((source: srcPath, destination: dstPath))
+        existingPaths.insert(dstPath)
+    }
+
+    func fileSize(atPath path: String) -> Int64? {
+        fileSizes[path]
+    }
+
+    func directorySize(atPath path: String) -> Int64? {
+        guard directoryPaths.contains(path) else { return nil }
+        return fileSizes[path] ?? 0
     }
 }

@@ -13,9 +13,11 @@ final class AppStore: ObservableObject {
     @Published var branches: [String] = []
     @Published var worktreeBasePath: String
     @Published var defaultEditorId: String
+    @Published var defaultCopyPatterns: [CopyPattern]
     @Published var isLoading = false
     @Published var error: String?
     @Published var showError = false
+    @Published var lastCopyResult: CopyResult?
 
     // MARK: - Dependencies
 
@@ -47,6 +49,7 @@ final class AppStore: ObservableObject {
         self.system = system
         self.worktreeBasePath = preferences.worktreeBasePath
         self.defaultEditorId = preferences.defaultEditorId
+        self.defaultCopyPatterns = preferences.defaultCopyPatterns
 
         if loadOnInit {
             setupFileSystemWatcher()
@@ -179,7 +182,8 @@ final class AppStore: ObservableObject {
         name: String,
         branch: String,
         createNewBranch: Bool,
-        baseBranch: String?
+        baseBranch: String?,
+        copyPatterns: [CopyPattern]? = nil
     ) async {
         guard let repo = selectedRepository else { return }
         guard !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
@@ -215,6 +219,13 @@ final class AppStore: ObservableObject {
                 preferences.setWorktreeBaseBranch(baseBranch, forWorktreePath: worktreePath)
             }
 
+            // Copy files from main worktree
+            let patterns = copyPatterns ?? effectiveCopyPatterns(for: repo)
+            if !patterns.isEmpty {
+                let result = await copyFiles(patterns: patterns, from: repo.path, to: worktreePath)
+                lastCopyResult = result
+            }
+
             await refreshWorktrees(for: repo)
             await loadBranches(for: repo)
         } catch {
@@ -227,7 +238,7 @@ final class AppStore: ObservableObject {
         return git.branchExists(at: repo.path, branch: branch)
     }
 
-    func recreateBranchAndWorktree(name: String, branch: String, baseBranch: String) async {
+    func recreateBranchAndWorktree(name: String, branch: String, baseBranch: String, copyPatterns: [CopyPattern]? = nil) async {
         guard let repo = selectedRepository else { return }
 
         isLoading = true
@@ -253,6 +264,13 @@ final class AppStore: ObservableObject {
             }
 
             preferences.setWorktreeBaseBranch(baseBranch, forWorktreePath: worktreePath)
+
+            // Copy files from main worktree
+            let patterns = copyPatterns ?? effectiveCopyPatterns(for: repo)
+            if !patterns.isEmpty {
+                let result = await copyFiles(patterns: patterns, from: repo.path, to: worktreePath)
+                lastCopyResult = result
+            }
 
             await refreshWorktrees(for: repo)
             await loadBranches(for: repo)
@@ -557,5 +575,69 @@ final class AppStore: ObservableObject {
         } else {
             await refreshAllStatuses()
         }
+    }
+
+    // MARK: - Copy Patterns
+
+    func effectiveCopyPatterns(for repo: Repository) -> [CopyPattern] {
+        preferences.effectiveCopyPatterns(forRepositoryId: repo.id)
+    }
+
+    func copyPatterns(for repo: Repository) -> [CopyPattern]? {
+        preferences.copyPatterns(forRepositoryId: repo.id)
+    }
+
+    func setCopyPatterns(_ patterns: [CopyPattern], for repo: Repository) {
+        preferences.setCopyPatterns(patterns, forRepositoryId: repo.id)
+    }
+
+    func removeCopyPatterns(for repo: Repository) {
+        preferences.removeCopyPatterns(forRepositoryId: repo.id)
+    }
+
+    func setDefaultCopyPatterns(_ patterns: [CopyPattern]) {
+        defaultCopyPatterns = patterns
+        preferences.defaultCopyPatterns = patterns
+    }
+
+    func getCopyPreview(for repo: Repository, patterns: [CopyPattern]? = nil) -> [CopyPreviewItem] {
+        let effectivePatterns = patterns ?? effectiveCopyPatterns(for: repo)
+        return effectivePatterns.map { pattern in
+            let fullPath = (repo.path as NSString).appendingPathComponent(pattern.pattern)
+            let exists = fileSystem.fileExists(atPath: fullPath)
+            let isDir = fileSystem.isDirectory(atPath: fullPath)
+            let size: Int64?
+            if exists {
+                size = isDir ? fileSystem.directorySize(atPath: fullPath) : fileSystem.fileSize(atPath: fullPath)
+            } else {
+                size = nil
+            }
+            return CopyPreviewItem(pattern: pattern.pattern, exists: exists, size: size, isDirectory: isDir)
+        }
+    }
+
+    private func copyFiles(patterns: [CopyPattern], from sourcePath: String, to destinationPath: String) async -> CopyResult {
+        var copied: [String] = []
+        var skipped: [String] = []
+        var failed: [(path: String, error: String)] = []
+
+        for pattern in patterns {
+            let srcPath = (sourcePath as NSString).appendingPathComponent(pattern.pattern)
+            let dstPath = (destinationPath as NSString).appendingPathComponent(pattern.pattern)
+
+            guard fileSystem.fileExists(atPath: srcPath) else {
+                skipped.append(pattern.pattern)
+                continue
+            }
+
+            do {
+                try await runIO { try self.fileSystem.copyItem(atPath: srcPath, toPath: dstPath) }
+                copied.append(pattern.pattern)
+            } catch {
+                failed.append((pattern.pattern, error.localizedDescription))
+            }
+        }
+
+        return CopyResult(copied: copied, skipped: skipped, failed: failed)
     }
 }

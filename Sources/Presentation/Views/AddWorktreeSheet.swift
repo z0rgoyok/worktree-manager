@@ -10,6 +10,8 @@ struct AddWorktreeSheet: View {
     @State private var selectedExistingBranch = ""
     @State private var baseBranch = "main"
     @State private var showBranchConflict = false
+    @State private var enabledCopyPatterns: Set<String> = []
+    @State private var copyPreview: [CopyPreviewItem] = []
 
     var body: some View {
         VStack(spacing: 20) {
@@ -54,6 +56,48 @@ struct AddWorktreeSheet: View {
                             .truncationMode(.middle)
                     }
                 }
+
+                if !copyPreview.isEmpty {
+                    Section {
+                        ForEach(copyPreview) { item in
+                            HStack {
+                                Toggle(isOn: Binding(
+                                    get: { enabledCopyPatterns.contains(item.pattern) },
+                                    set: { enabled in
+                                        if enabled {
+                                            enabledCopyPatterns.insert(item.pattern)
+                                        } else {
+                                            enabledCopyPatterns.remove(item.pattern)
+                                        }
+                                    }
+                                )) {
+                                    HStack {
+                                        Image(systemName: item.isDirectory ? "folder" : "doc")
+                                            .foregroundStyle(item.exists ? .secondary : .tertiary)
+
+                                        Text(item.pattern)
+                                            .font(.system(.body, design: .monospaced))
+                                            .foregroundStyle(item.exists ? .primary : .tertiary)
+
+                                        if !item.exists {
+                                            Text("(not found)")
+                                                .font(.caption)
+                                                .foregroundStyle(.tertiary)
+                                        } else if let size = item.sizeFormatted {
+                                            Text(size)
+                                                .font(.caption)
+                                                .foregroundStyle(.secondary)
+                                        }
+                                    }
+                                }
+                                .toggleStyle(.checkbox)
+                                .disabled(!item.exists)
+                            }
+                        }
+                    } header: {
+                        Text("Copy from main worktree")
+                    }
+                }
             }
             .formStyle(.grouped)
 
@@ -85,6 +129,12 @@ struct AddWorktreeSheet: View {
             } else if let first = store.branches.first {
                 baseBranch = first
             }
+
+            // Load copy preview
+            if let repo = store.selectedRepository {
+                copyPreview = store.getCopyPreview(for: repo)
+                enabledCopyPatterns = Set(copyPreview.filter { $0.exists }.map { $0.pattern })
+            }
         }
         .onChange(of: branchName) { oldValue, newValue in
             if createNewBranch && (worktreeName.isEmpty || worktreeName == oldValue) {
@@ -92,6 +142,7 @@ struct AddWorktreeSheet: View {
             }
         }
         .sheet(isPresented: $showBranchConflict) {
+            let patterns = selectedCopyPatterns.isEmpty ? nil : selectedCopyPatterns
             BranchConflictSheet(
                 branchName: branchName,
                 worktreeName: worktreeName,
@@ -102,7 +153,8 @@ struct AddWorktreeSheet: View {
                             name: worktreeName,
                             branch: branchName,
                             createNewBranch: false,
-                            baseBranch: nil
+                            baseBranch: nil,
+                            copyPatterns: patterns
                         )
                     }
                     dismiss()
@@ -113,7 +165,8 @@ struct AddWorktreeSheet: View {
                         await store.recreateBranchAndWorktree(
                             name: worktreeName,
                             branch: branchName,
-                            baseBranch: baseBranch
+                            baseBranch: baseBranch,
+                            copyPatterns: patterns
                         )
                     }
                     dismiss()
@@ -151,6 +204,10 @@ struct AddWorktreeSheet: View {
         createWorktree()
     }
 
+    private var selectedCopyPatterns: [CopyPattern] {
+        enabledCopyPatterns.map { CopyPattern(pattern: $0) }
+    }
+
     private func createWorktree() {
         let branch = createNewBranch ? branchName : selectedExistingBranch
         let base = createNewBranch ? baseBranch : nil
@@ -164,7 +221,8 @@ struct AddWorktreeSheet: View {
                 name: worktreeName,
                 branch: branch,
                 createNewBranch: createNewBranch,
-                baseBranch: base
+                baseBranch: base,
+                copyPatterns: selectedCopyPatterns.isEmpty ? nil : selectedCopyPatterns
             )
         }
 

@@ -108,4 +108,59 @@ final class StorageService {
         dict.removeValue(forKey: path)
         defaults.set(dict, forKey: worktreeBaseBranchesKey)
     }
+
+    // MARK: - Copy Patterns
+
+    private let defaultCopyPatternsKey = "defaultCopyPatterns"
+    private let repoCopyPatternsKey = "repositoryCopyPatterns"
+
+    var defaultCopyPatterns: [CopyPattern] {
+        get {
+            guard let data = defaults.data(forKey: defaultCopyPatternsKey),
+                  let patterns = try? JSONDecoder().decode([CopyPattern].self, from: data) else {
+                return []
+            }
+            return patterns
+        }
+        set {
+            guard let data = try? JSONEncoder().encode(newValue) else { return }
+            defaults.set(data, forKey: defaultCopyPatternsKey)
+        }
+    }
+
+    func copyPatterns(forRepositoryId id: UUID) -> [CopyPattern]? {
+        guard let data = defaults.data(forKey: repoCopyPatternsKey),
+              let dict = try? JSONDecoder().decode([String: [CopyPattern]].self, from: data) else {
+            return nil
+        }
+        return dict[id.uuidString]
+    }
+
+    func setCopyPatterns(_ patterns: [CopyPattern], forRepositoryId id: UUID) {
+        var dict: [String: [CopyPattern]] = [:]
+        if let data = defaults.data(forKey: repoCopyPatternsKey),
+           let existing = try? JSONDecoder().decode([String: [CopyPattern]].self, from: data) {
+            dict = existing
+        }
+        dict[id.uuidString] = patterns
+        if let data = try? JSONEncoder().encode(dict) {
+            defaults.set(data, forKey: repoCopyPatternsKey)
+        }
+    }
+
+    func removeCopyPatterns(forRepositoryId id: UUID) {
+        var dict: [String: [CopyPattern]] = [:]
+        if let data = defaults.data(forKey: repoCopyPatternsKey),
+           let existing = try? JSONDecoder().decode([String: [CopyPattern]].self, from: data) {
+            dict = existing
+        }
+        dict.removeValue(forKey: id.uuidString)
+        if let data = try? JSONEncoder().encode(dict) {
+            defaults.set(data, forKey: repoCopyPatternsKey)
+        }
+    }
+
+    func effectiveCopyPatterns(forRepositoryId id: UUID) -> [CopyPattern] {
+        copyPatterns(forRepositoryId: id) ?? defaultCopyPatterns
+    }
 }

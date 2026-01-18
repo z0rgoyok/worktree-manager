@@ -19,8 +19,18 @@ struct SettingsView: View {
             .tabItem {
                 Label("General", systemImage: "gear")
             }
+
+            CopyPatternsSettingsView(
+                patterns: Binding(
+                    get: { store.defaultCopyPatterns },
+                    set: { store.setDefaultCopyPatterns($0) }
+                )
+            )
+            .tabItem {
+                Label("Copy Files", systemImage: "doc.on.doc")
+            }
         }
-        .frame(width: 450, height: 300)
+        .frame(width: 450, height: 350)
     }
 }
 
@@ -75,6 +85,26 @@ struct GeneralSettingsView: View {
         if panel.runModal() == .OK, let url = panel.url {
             worktreeBasePath = url.path
         }
+    }
+}
+
+struct CopyPatternsSettingsView: View {
+    @Binding var patterns: [CopyPattern]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Default Copy Patterns")
+                .font(.headline)
+
+            Text("Files and directories matching these patterns will be copied from the main worktree when creating new worktrees. Individual repositories can override these defaults.")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+
+            CopyPatternsEditor(patterns: $patterns, showHeader: false)
+
+            Spacer()
+        }
+        .padding()
     }
 }
 
