@@ -9,6 +9,7 @@ final class StorageService {
     private let defaultEditorKey = "defaultEditor"
     private let defaultEditorIdKey = "defaultEditorId"
     private let worktreeBasePathKey = "worktreeBasePath"
+    private let preferredBaseBranchesKey = "preferredBaseBranches"
 
     private init() {}
 
@@ -73,5 +74,18 @@ final class StorageService {
     private var defaultWorktreeBasePath: String {
         let home = FileManager.default.homeDirectoryForCurrentUser.path
         return "\(home)/worktrees"
+    }
+
+    // MARK: - Preferred Base Branches
+
+    func preferredBaseBranch(forRepositoryId id: UUID) -> String? {
+        let dict = defaults.dictionary(forKey: preferredBaseBranchesKey) as? [String: String] ?? [:]
+        return dict[id.uuidString]
+    }
+
+    func setPreferredBaseBranch(_ branch: String, forRepositoryId id: UUID) {
+        var dict = defaults.dictionary(forKey: preferredBaseBranchesKey) as? [String: String] ?? [:]
+        dict[id.uuidString] = branch
+        defaults.set(dict, forKey: preferredBaseBranchesKey)
     }
 }

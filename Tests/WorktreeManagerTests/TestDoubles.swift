@@ -5,6 +5,7 @@ final class InMemoryPreferencesStore: PreferencesStore {
     var repositories: [Repository]
     var worktreeBasePath: String
     var defaultEditorId: String
+    private var preferredBaseBranches: [UUID: String] = [:]
 
     private(set) var saveRepositoriesCalls: [[Repository]] = []
 
@@ -25,6 +26,14 @@ final class InMemoryPreferencesStore: PreferencesStore {
     func saveRepositories(_ repositories: [Repository]) {
         self.repositories = repositories
         saveRepositoriesCalls.append(repositories)
+    }
+
+    func preferredBaseBranch(forRepositoryId id: UUID) -> String? {
+        preferredBaseBranches[id]
+    }
+
+    func setPreferredBaseBranch(_ branch: String, forRepositoryId id: UUID) {
+        preferredBaseBranches[id] = branch
     }
 }
 

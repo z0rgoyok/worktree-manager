@@ -432,6 +432,16 @@ final class AppStore: ObservableObject {
         preferences.defaultEditorId = id
     }
 
+    func preferredBaseBranch() -> String? {
+        guard let repo = selectedRepository else { return nil }
+        return preferences.preferredBaseBranch(forRepositoryId: repo.id)
+    }
+
+    func setPreferredBaseBranch(_ branch: String) {
+        guard let repo = selectedRepository else { return }
+        preferences.setPreferredBaseBranch(branch, forRepositoryId: repo.id)
+    }
+
     // MARK: - Error Handling
 
     private func showError(message: String) {

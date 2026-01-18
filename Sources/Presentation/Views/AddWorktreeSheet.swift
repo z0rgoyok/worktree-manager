@@ -78,7 +78,9 @@ struct AddWorktreeSheet: View {
             if let firstBranch = store.branches.first {
                 selectedExistingBranch = firstBranch
             }
-            if let main = store.branches.first(where: { $0 == "main" || $0 == "master" }) {
+            if let preferred = store.preferredBaseBranch(), store.branches.contains(preferred) {
+                baseBranch = preferred
+            } else if let main = store.branches.first(where: { $0 == "main" || $0 == "master" }) {
                 baseBranch = main
             } else if let first = store.branches.first {
                 baseBranch = first
@@ -152,6 +154,10 @@ struct AddWorktreeSheet: View {
     private func createWorktree() {
         let branch = createNewBranch ? branchName : selectedExistingBranch
         let base = createNewBranch ? baseBranch : nil
+
+        if createNewBranch {
+            store.setPreferredBaseBranch(baseBranch)
+        }
 
         Task {
             await store.createWorktree(
