@@ -27,6 +27,7 @@ struct Editor: Identifiable, Codable, Hashable {
         Editor(id: "goland", name: "GoLand", command: "goland", icon: "hare", appName: "GoLand"),
         Editor(id: "sublime", name: "Sublime Text", command: "subl", icon: "text.alignleft", appName: "Sublime Text"),
         Editor(id: "zed", name: "Zed", command: "zed", icon: "bolt", appName: "Zed"),
+        Editor(id: "xcode", name: "Xcode", command: "xed", icon: "swift", appName: "Xcode"),
         Editor(id: "finder", name: "Finder", command: "open", icon: "folder"),
         Editor(id: "terminal", name: "Terminal", command: "open -a Terminal", icon: "terminal"),
     ]
