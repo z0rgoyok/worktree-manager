@@ -4,21 +4,20 @@ struct ContentView: View {
     @EnvironmentObject var store: AppStore
     @State private var showAddWorktree = false
     @State private var showHelp = false
-    @State private var columnVisibility = NavigationSplitViewVisibility.all
+    @State private var sidebarSelection: SidebarSelection?
+    @State private var sidebarWidth: CGFloat = DS.Sizes.sidebarIdealWidth
 
     var body: some View {
-        NavigationSplitView(columnVisibility: $columnVisibility) {
-            // Sidebar: Repository list
-            RepositorySidebar()
-        } detail: {
-            // Main content: Worktree list
-            if store.selectedRepository != nil {
-                WorktreeList()
-            } else {
-                EmptyStateView()
-            }
+        HSplitView {
+            // Left: Project tree sidebar
+            ProjectTreeSidebar(selection: $sidebarSelection)
+                .frame(minWidth: DS.Sizes.sidebarMinWidth, maxWidth: DS.Sizes.sidebarMaxWidth)
+
+            // Right: Kanban board
+            KanbanBoard(selection: sidebarSelection)
+                .frame(minWidth: 600)
         }
-        .frame(minWidth: 700, minHeight: 450)
+        .frame(minWidth: 900, minHeight: 550)
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
                 Button {
@@ -32,7 +31,7 @@ struct ContentView: View {
                     Button {
                         showAddWorktree = true
                     } label: {
-                        Label("New Worktree", systemImage: "plus")
+                        Label("New Worktree", systemImage: "plus.square.on.square")
                     }
                     .help("Create new worktree")
 
@@ -58,6 +57,22 @@ struct ContentView: View {
             }
         } message: {
             Text(store.error ?? "Unknown error")
+        }
+        .onChange(of: sidebarSelection) { _, newSelection in
+            // Sync selection with store
+            if let selection = newSelection {
+                Task {
+                    if store.selectedRepository?.id != selection.repository.id {
+                        await store.selectRepository(selection.repository)
+                    }
+                }
+            }
+        }
+        .onAppear {
+            // Initialize selection from store
+            if let repo = store.selectedRepository {
+                sidebarSelection = .repository(repo)
+            }
         }
     }
 }
