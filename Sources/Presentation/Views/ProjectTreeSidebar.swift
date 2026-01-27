@@ -267,8 +267,21 @@ struct ProjectTreeNode: View {
             .contentShape(Rectangle())
             .onHover { isHovered = $0 }
             .onTapGesture {
-                selection = .repository(repository)
-                Task { await store.selectRepository(repository) }
+                if isExpanded && isRepoSelected {
+                    // Already selected and expanded — collapse
+                    withAnimation(DS.Animation.quick) {
+                        isExpanded = false
+                    }
+                } else {
+                    // Select and expand
+                    selection = .repository(repository)
+                    Task { await store.selectRepository(repository) }
+                    if !isExpanded {
+                        withAnimation(DS.Animation.quick) {
+                            isExpanded = true
+                        }
+                    }
+                }
             }
             .contextMenu {
                 Button("Show in Finder") {
