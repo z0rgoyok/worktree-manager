@@ -136,6 +136,21 @@ final class AppStore: ObservableObject {
         await loadBranches(for: repo)
     }
 
+    /// Load worktrees for a repository without changing selection
+    /// Returns the loaded worktrees directly
+    func loadWorktreesOnly(for repo: Repository) async -> [Worktree] {
+        do {
+            let listedWorktrees = try await runIO { try self.git.listWorktrees(at: repo.path) }
+            let enrichedWorktrees = listedWorktrees.map { worktree in
+                let baseBranch = preferences.worktreeBaseBranch(forWorktreePath: worktree.path)
+                return worktree.withBaseBranch(baseBranch)
+            }
+            return enrichedWorktrees
+        } catch {
+            return []
+        }
+    }
+
     // MARK: - Worktree Use Cases
 
     func refreshWorktrees(for repo: Repository? = nil) async {
