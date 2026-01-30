@@ -284,6 +284,14 @@ struct ProjectTreeNode: View {
                 }
             }
             .contextMenu {
+                Button("Copy Repo Path") {
+                    let pasteboard = NSPasteboard.general
+                    pasteboard.clearContents()
+                    pasteboard.setString(repository.path, forType: .string)
+                }
+
+                Divider()
+
                 Button("Show in Finder") {
                     NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: repository.path)
                 }

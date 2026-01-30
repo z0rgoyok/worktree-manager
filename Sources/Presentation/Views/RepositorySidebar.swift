@@ -19,6 +19,14 @@ struct RepositorySidebar: View {
                     RepositoryRow(repository: repo)
                         .tag(repo)
                         .contextMenu {
+                            Button("Copy Repo Path") {
+                                let pasteboard = NSPasteboard.general
+                                pasteboard.clearContents()
+                                pasteboard.setString(repo.path, forType: .string)
+                            }
+
+                            Divider()
+
                             Button("Show in Finder") {
                                 NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: repo.path)
                             }
