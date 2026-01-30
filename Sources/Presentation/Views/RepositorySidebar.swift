@@ -24,6 +24,13 @@ struct RepositorySidebar: View {
                             }
 
                             Button {
+                                NSPasteboard.general.clearContents()
+                                NSPasteboard.general.setString(repo.path, forType: .string)
+                            } label: {
+                                Label("Copy Path", systemImage: "doc.on.doc")
+                            }
+
+                            Button {
                                 repositoryForCopySettings = repo
                             } label: {
                                 Label("Copy Files Settings...", systemImage: "doc.on.doc")
