@@ -41,5 +41,4 @@ jobs:
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           claude_args: |
-            --max-turns 50
             --allowedTools "Edit,Write,Read,Glob,Grep,Bash(swift build:*),Bash(swift test:*),Bash(xcodebuild:*)"
