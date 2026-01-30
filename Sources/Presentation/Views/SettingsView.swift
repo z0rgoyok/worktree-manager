@@ -110,5 +110,5 @@ struct CopyPatternsSettingsView: View {
 
 #Preview {
     SettingsView()
-        .environmentObject(AppStore())
+        .environmentObject(AppStore.makeDefault())
 }

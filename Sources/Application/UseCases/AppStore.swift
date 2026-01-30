@@ -4,6 +4,19 @@ import Combine
 /// Central application state and use cases
 @MainActor
 final class AppStore: ObservableObject {
+    /// Factory method for creating AppStore with default production dependencies.
+    /// Used by composition root and SwiftUI previews.
+    static func makeDefault(loadOnInit: Bool = true) -> AppStore {
+        AppStore(
+            git: GitService.shared,
+            preferences: StorageService.shared,
+            editorOpener: EditorService.shared,
+            fileSystemWatcher: FileSystemWatcher(),
+            fileSystem: FileSystemService.shared,
+            system: SystemService.shared,
+            loadOnInit: loadOnInit
+        )
+    }
     // MARK: - Published State
 
     @Published var repositories: [Repository] = []
@@ -33,12 +46,12 @@ final class AppStore: ObservableObject {
     // MARK: - Initialization
 
     init(
-        git: GitClient = GitService.shared,
-        preferences: PreferencesStore = StorageService.shared,
-        editorOpener: EditorOpening = EditorService.shared,
-        fileSystemWatcher: FileSystemWatching = FileSystemWatcher(),
-        fileSystem: FileSystemHandling = FileSystemService.shared,
-        system: SystemOpening = SystemService.shared,
+        git: GitClient,
+        preferences: PreferencesStore,
+        editorOpener: EditorOpening,
+        fileSystemWatcher: FileSystemWatching,
+        fileSystem: FileSystemHandling,
+        system: SystemOpening,
         loadOnInit: Bool = true
     ) {
         self.git = git

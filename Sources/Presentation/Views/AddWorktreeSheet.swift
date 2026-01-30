@@ -308,5 +308,5 @@ struct BranchConflictSheet: View {
 
 #Preview {
     AddWorktreeSheet()
-        .environmentObject(AppStore())
+        .environmentObject(AppStore.makeDefault())
 }
