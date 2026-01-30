@@ -289,6 +289,13 @@ struct ProjectTreeNode: View {
                 }
 
                 Button {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(repository.path, forType: .string)
+                } label: {
+                    Label("Copy Path", systemImage: "doc.on.doc")
+                }
+
+                Button {
                     onCopySettings()
                 } label: {
                     Label("Copy Files Settings...", systemImage: "doc.on.doc")
