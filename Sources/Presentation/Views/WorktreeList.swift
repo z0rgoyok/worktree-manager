@@ -871,5 +871,5 @@ struct WorktreeInfoButton: View {
 
 #Preview {
     WorktreeList()
-        .environmentObject(AppStore())
+        .environmentObject(AppStore.makeDefault())
 }
