@@ -35,6 +35,24 @@ swift run
 .build/release/WorktreeManager
 ```
 
+## Build & Run.app (dev launcher)
+
+`Build & Run.app` is a convenience launcher for local iteration:
+
+- Builds **Debug** by default (faster than Release)
+- Skips the build entirely when `Sources/` and `Package.swift` haven’t changed
+- Copies the built binary into `Worktree Manager.app` and launches it
+
+Optional overrides:
+
+```bash
+# Force rebuild even if inputs look up-to-date
+WORKTREE_MANAGER_FORCE_REBUILD=1 open "Build & Run.app"
+
+# Build release instead of debug
+WORKTREE_MANAGER_BUILD_CONFIG=release open "Build & Run.app"
+```
+
 ## Creating an App Bundle
 
 To create a proper macOS app bundle:
