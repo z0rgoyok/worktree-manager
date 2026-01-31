@@ -91,15 +91,39 @@ struct WorktreeMenuItems: View {
         var body: some View {
             Section {
                 Button("Open in Editor") {
-                    workspace.openInEditor(worktree)
+                    workspace.smartOpenInEditor(worktree)
                 }
                 .keyboardShortcut("o", modifiers: .command)
 
                 Menu("Open in...") {
                     ForEach(workspace.configuredEditors()) { editor in
-                        Button(editor.name) {
-                            workspace.openInEditor(worktree, editor: editor)
+                        editorButton(editor)
+                    }
+                    Divider()
+                    Button(workspace.rememberEditorChoice ? "Forget Editor Choice" : "Remember Editor Choice") {
+                        workspace.rememberEditorChoice.toggle()
+                        if !workspace.rememberEditorChoice {
+                            workspace.clearPreferredEditor(for: worktree)
                         }
+                    }
+                }
+            }
+        }
+
+        private var preferredEditor: Editor? {
+            workspace.preferredEditor(for: worktree)
+        }
+
+        @ViewBuilder
+        private func editorButton(_ editor: Editor) -> some View {
+            Button {
+                workspace.openInEditorAndRemember(worktree, editor: editor)
+            } label: {
+                HStack {
+                    Text(editor.name)
+                    if workspace.rememberEditorChoice && preferredEditor?.id == editor.id {
+                        Spacer()
+                        Image(systemName: "checkmark")
                     }
                 }
             }

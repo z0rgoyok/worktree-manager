@@ -70,18 +70,8 @@ struct ContentView: View {
                 .help("New Worktree... (⌘N)")
 
                 if let selectedWorktree = workspace.state.selectedWorktree {
-                    Menu {
-                        ForEach(workspace.configuredEditors()) { editor in
-                            Button(editor.name) {
-                                workspace.openInEditor(selectedWorktree, editor: editor)
-                            }
-                        }
-                    } label: {
-                        Label("Open", systemImage: "arrow.up.forward.app")
-                    } primaryAction: {
-                        workspace.openInEditor(selectedWorktree)
-                    }
-                    .help("Open in Editor (⌘O)")
+                    OpenEditorMenu(workspace: workspace, worktree: selectedWorktree)
+                        .help("Open in Editor (⌘O)")
 
                     Button {
                         workspace.openInFinder(selectedWorktree)

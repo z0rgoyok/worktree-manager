@@ -12,6 +12,8 @@ final class StorageService {
     private let preferredBaseBranchesKey = "preferredBaseBranches"
     private let worktreeBaseBranchesKey = "worktreeBaseBranches"
     private let expandedRepositoriesKey = "expandedRepositories"
+    private let rememberEditorChoiceKey = "rememberEditorChoice"
+    private let worktreePreferredEditorsKey = "worktreePreferredEditors"
 
     private init() {}
 
@@ -60,6 +62,30 @@ final class StorageService {
         set {
             defaults.set(newValue, forKey: defaultEditorIdKey)
         }
+    }
+
+    // MARK: - Remember Editor Choice
+
+    var rememberEditorChoice: Bool {
+        get { defaults.bool(forKey: rememberEditorChoiceKey) }
+        set { defaults.set(newValue, forKey: rememberEditorChoiceKey) }
+    }
+
+    func preferredEditorId(forWorktreePath path: String) -> String? {
+        let dict = defaults.dictionary(forKey: worktreePreferredEditorsKey) as? [String: String] ?? [:]
+        return dict[path]
+    }
+
+    func setPreferredEditorId(_ editorId: String, forWorktreePath path: String) {
+        var dict = defaults.dictionary(forKey: worktreePreferredEditorsKey) as? [String: String] ?? [:]
+        dict[path] = editorId
+        defaults.set(dict, forKey: worktreePreferredEditorsKey)
+    }
+
+    func removePreferredEditorId(forWorktreePath path: String) {
+        var dict = defaults.dictionary(forKey: worktreePreferredEditorsKey) as? [String: String] ?? [:]
+        dict.removeValue(forKey: path)
+        defaults.set(dict, forKey: worktreePreferredEditorsKey)
     }
 
     // MARK: - Worktree Base Path

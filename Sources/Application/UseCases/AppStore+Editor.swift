@@ -36,4 +36,26 @@ extension AppStore {
     func availableEditors() -> [Editor] {
         editorOpener.availableEditors()
     }
+
+    // MARK: - Remember Editor Choice
+
+    var rememberEditorChoice: Bool {
+        get { preferences.rememberEditorChoice }
+        set { preferences.rememberEditorChoice = newValue }
+    }
+
+    func preferredEditor(for worktree: Worktree) -> Editor? {
+        guard let editorId = preferences.preferredEditorId(forWorktreePath: worktree.path) else {
+            return nil
+        }
+        return configuredEditors.first { $0.id == editorId }
+    }
+
+    func setPreferredEditor(_ editor: Editor, for worktree: Worktree) {
+        preferences.setPreferredEditorId(editor.id, forWorktreePath: worktree.path)
+    }
+
+    func clearPreferredEditor(for worktree: Worktree) {
+        preferences.removePreferredEditorId(forWorktreePath: worktree.path)
+    }
 }

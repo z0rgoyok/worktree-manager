@@ -184,6 +184,43 @@ final class WorkspaceComponent: ObservableObject {
         store.configuredEditors
     }
 
+    var rememberEditorChoice: Bool {
+        get { store.rememberEditorChoice }
+        set {
+            objectWillChange.send()
+            store.rememberEditorChoice = newValue
+        }
+    }
+
+    func preferredEditor(for worktree: Worktree) -> Editor? {
+        store.preferredEditor(for: worktree)
+    }
+
+    func setPreferredEditor(_ editor: Editor, for worktree: Worktree) {
+        store.setPreferredEditor(editor, for: worktree)
+    }
+
+    func clearPreferredEditor(for worktree: Worktree) {
+        store.clearPreferredEditor(for: worktree)
+    }
+
+    /// Opens worktree in editor, using remembered editor if available
+    func smartOpenInEditor(_ worktree: Worktree) {
+        if rememberEditorChoice, let editor = preferredEditor(for: worktree) {
+            openInEditor(worktree, editor: editor)
+        } else {
+            openInEditor(worktree)
+        }
+    }
+
+    /// Opens worktree in specific editor and optionally remembers choice
+    func openInEditorAndRemember(_ worktree: Worktree, editor: Editor) {
+        if rememberEditorChoice {
+            setPreferredEditor(editor, for: worktree)
+        }
+        openInEditor(worktree, editor: editor)
+    }
+
     func loadExpandedRepositoryIds() -> Set<UUID> {
         store.preferences.expandedRepositoryIds
     }

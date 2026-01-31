@@ -7,6 +7,11 @@ protocol PreferencesStore {
     var worktreeBasePath: String { get set }
     var defaultEditorId: String { get set }
     var expandedRepositoryIds: Set<UUID> { get set }
+    var rememberEditorChoice: Bool { get set }
+
+    func preferredEditorId(forWorktreePath path: String) -> String?
+    func setPreferredEditorId(_ editorId: String, forWorktreePath path: String)
+    func removePreferredEditorId(forWorktreePath path: String)
 
     func preferredBaseBranch(forRepositoryId id: UUID) -> String?
     func setPreferredBaseBranch(_ branch: String, forRepositoryId id: UUID)
