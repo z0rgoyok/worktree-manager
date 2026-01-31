@@ -19,26 +19,4 @@ struct WorktreeStatus: Equatable {
     var hasPR: Bool {
         prStatus != nil
     }
-
-    var statusSummary: String {
-        var parts: [String] = []
-
-        if isDirty {
-            parts.append("uncommitted changes")
-        }
-
-        if ahead > 0 {
-            parts.append("\(ahead) unpushed")
-        }
-
-        if behind > 0 {
-            parts.append("\(behind) behind")
-        }
-
-        if let pr = prStatus {
-            parts.append("PR #\(pr.number) \(pr.state.lowercased())")
-        }
-
-        return parts.isEmpty ? "Clean" : parts.joined(separator: " · ")
-    }
 }

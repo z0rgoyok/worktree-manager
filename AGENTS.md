@@ -229,13 +229,14 @@ Before finalizing:
 
 - `Package.swift`: Swift Package Manager manifest (single executable target).
 - `Sources/App/`: SwiftUI entry point (`WorktreeManagerApp`) and app-level commands.
-- `Sources/Presentation/Views/`: SwiftUI views (UI and user flows).
+- `Sources/UI/`: SwiftUI views, menus, and design system (UI and user flows), organized by feature.
+- `Sources/Presentation/`: presentation helpers (formatting, view models, mapping) without SwiftUI.
 - `Sources/Application/UseCases/`: `AppStore` (central state + use cases).
 - `Sources/Domain/Entities/`: core models (`Repository`, `Worktree`, `Editor`, etc.).
 - `Sources/Infrastructure/`: integration code (Git CLI wrapper, persistence, filesystem watching).
 - Root assets: `AppIcon.*`, `generate_icon.py` (optional icon generation tooling).
 
-The code follows a clean-architecture split: keep UI in `Presentation`, business rules in `Application`/`Domain`, and side effects (Git, filesystem, persistence) in `Infrastructure`.
+The code follows a clean-architecture split: keep UI in `UI`, business rules in `Application`/`Domain`, and side effects (Git, filesystem, persistence) in `Infrastructure`.
 
 ## Build, Test, and Development Commands
 
@@ -256,7 +257,7 @@ The code follows a clean-architecture split: keep UI in `Presentation`, business
 
 ## Testing Guidelines
 
-There is currently no committed `Tests/` suite. If you add tests, use XCTest under `Tests/WorktreeManagerTests/` and run them with `swift test`.
+Tests live under `Tests/WorktreeManagerTests/` (XCTest). Run them with `swift test`.
 
 ## Commit & Pull Request Guidelines
 

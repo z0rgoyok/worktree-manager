@@ -118,5 +118,6 @@ Sources/
 ├── Domain/Entities/        # Core business objects
 ├── Application/UseCases/   # Business logic and state
 ├── Infrastructure/Git/     # Git CLI wrapper, storage
-└── Presentation/Views/     # SwiftUI views
+├── UI/                     # SwiftUI views (organized by feature)
+└── Presentation/           # Presentation helpers (formatting, mapping)
 ```
