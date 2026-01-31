@@ -12,6 +12,8 @@ struct CompleteWorktreeSheet: View {
     @State private var pullTargetFirst = true
     @State private var forceDelete = false
     @State private var hasRemoteBranch = false
+    @State private var isPreparing = false
+    @State private var isSubmitting = false
 
     private var status: WorktreeStatus? {
         statusCell.value
@@ -174,20 +176,20 @@ struct CompleteWorktreeSheet: View {
                 .keyboardShortcut(.defaultAction)
                 .buttonStyle(.borderedProminent)
                 .tint(selectedAction.color)
-                .disabled(isDirty && !forceDelete)
+                .disabled((isDirty && !forceDelete) || isPreparing || isSubmitting)
             }
         }
         .padding(24)
         .frame(width: 420)
-        .onAppear {
-            // Set initial action based on PR status
-            if hasMergedPR {
-                selectedAction = .prMerged
-            } else if hasOpenPR {
-                selectedAction = .prMerged // User might want to finish after merging PR
+        .overlay {
+            if isPreparing {
+                BlockingProgressOverlay(title: "Preparing…")
+            } else if isSubmitting {
+                BlockingProgressOverlay(title: "Completing worktree…")
             }
-            // Check for remote branch
-            hasRemoteBranch = store.hasRemoteBranch(for: worktree)
+        }
+        .task {
+            await prepare()
         }
     }
 
@@ -200,8 +202,25 @@ struct CompleteWorktreeSheet: View {
             deleteRemoteBranch: deleteRemoteBranch && hasRemoteBranch,
             force: forceDelete
         )
-        Task { await store.completeWorktree(worktree, options: options) }
-        dismiss()
+        Task {
+            isSubmitting = true
+            await store.completeWorktree(worktree, options: options)
+            isSubmitting = false
+            dismiss()
+        }
+    }
+
+    private func prepare() async {
+        guard !isPreparing else { return }
+        isPreparing = true
+        defer { isPreparing = false }
+
+        if hasMergedPR {
+            selectedAction = .prMerged
+        } else if hasOpenPR {
+            selectedAction = .prMerged
+        }
+
+        hasRemoteBranch = await store.loadHasRemoteBranch(for: worktree)
     }
 }
-

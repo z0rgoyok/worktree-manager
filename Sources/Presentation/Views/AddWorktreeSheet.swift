@@ -12,6 +12,8 @@ struct AddWorktreeSheet: View {
     @State private var showBranchConflict = false
     @State private var enabledCopyPatterns: Set<String> = []
     @State private var copyPreview: [CopyPreviewItem] = []
+    @State private var isPreparing = false
+    @State private var isSubmitting = false
 
     var body: some View {
         VStack(spacing: 20) {
@@ -32,15 +34,37 @@ struct AddWorktreeSheet: View {
                     TextField("New Branch Name", text: $branchName)
                         .textFieldStyle(.roundedBorder)
 
-                    Picker("Based on", selection: $baseBranch) {
-                        ForEach(mainBranches, id: \.self) { branch in
-                            Text(branch).tag(branch)
+                    Group {
+                        if store.branches.isEmpty {
+                            HStack(spacing: 8) {
+                                ProgressView()
+                                    .controlSize(.small)
+                                Text("Loading branches…")
+                                    .foregroundStyle(.secondary)
+                            }
+                        } else {
+                            Picker("Based on", selection: $baseBranch) {
+                                ForEach(mainBranches, id: \.self) { branch in
+                                    Text(branch).tag(branch)
+                                }
+                            }
                         }
                     }
                 } else {
-                    Picker("Branch", selection: $selectedExistingBranch) {
-                        ForEach(store.branches, id: \.self) { branch in
-                            Text(branch).tag(branch)
+                    Group {
+                        if store.branches.isEmpty {
+                            HStack(spacing: 8) {
+                                ProgressView()
+                                    .controlSize(.small)
+                                Text("Loading branches…")
+                                    .foregroundStyle(.secondary)
+                            }
+                        } else {
+                            Picker("Branch", selection: $selectedExistingBranch) {
+                                ForEach(store.branches, id: \.self) { branch in
+                                    Text(branch).tag(branch)
+                                }
+                            }
                         }
                     }
                 }
@@ -113,28 +137,20 @@ struct AddWorktreeSheet: View {
                     attemptCreate()
                 }
                 .keyboardShortcut(.defaultAction)
-                .disabled(!isValid)
+                .disabled(!isValid || store.branches.isEmpty || isPreparing || isSubmitting)
             }
         }
         .padding()
         .frame(width: 400)
-        .onAppear {
-            if let firstBranch = store.branches.first {
-                selectedExistingBranch = firstBranch
+        .overlay {
+            if isPreparing {
+                BlockingProgressOverlay(title: "Preparing…")
+            } else if isSubmitting {
+                BlockingProgressOverlay(title: "Creating worktree…")
             }
-            if let preferred = store.preferredBaseBranch(), store.branches.contains(preferred) {
-                baseBranch = preferred
-            } else if let main = store.branches.first(where: { $0 == "main" || $0 == "master" }) {
-                baseBranch = main
-            } else if let first = store.branches.first {
-                baseBranch = first
-            }
-
-            // Load copy preview
-            if let repo = store.selectedRepository {
-                copyPreview = store.getCopyPreview(for: repo)
-                enabledCopyPatterns = Set(copyPreview.filter { $0.exists }.map { $0.pattern })
-            }
+        }
+        .task {
+            await prepare()
         }
         .onChange(of: branchName) { oldValue, newValue in
             if createNewBranch && (worktreeName.isEmpty || worktreeName == oldValue) {
@@ -217,6 +233,7 @@ struct AddWorktreeSheet: View {
         }
 
         Task {
+            isSubmitting = true
             await store.createWorktree(
                 name: worktreeName,
                 branch: branch,
@@ -224,9 +241,36 @@ struct AddWorktreeSheet: View {
                 baseBranch: base,
                 copyPatterns: selectedCopyPatterns.isEmpty ? nil : selectedCopyPatterns
             )
+            isSubmitting = false
+            dismiss()
+        }
+    }
+
+    private func prepare() async {
+        guard !isPreparing else { return }
+        isPreparing = true
+        defer { isPreparing = false }
+
+        if store.branches.isEmpty {
+            await store.loadBranches()
         }
 
-        dismiss()
+        if selectedExistingBranch.isEmpty, let firstBranch = store.branches.first {
+            selectedExistingBranch = firstBranch
+        }
+
+        if let preferred = store.preferredBaseBranch(), store.branches.contains(preferred) {
+            baseBranch = preferred
+        } else if let main = store.branches.first(where: { $0 == "main" || $0 == "master" }) {
+            baseBranch = main
+        } else if let first = store.branches.first {
+            baseBranch = first
+        }
+
+        if let repo = store.selectedRepository {
+            copyPreview = await store.loadCopyPreview(for: repo)
+            enabledCopyPatterns = Set(copyPreview.filter { $0.exists }.map { $0.pattern })
+        }
     }
 }
 

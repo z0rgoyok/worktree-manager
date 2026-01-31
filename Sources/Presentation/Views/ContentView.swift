@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ContentView: View {
     @EnvironmentObject var store: AppStore
+    @EnvironmentObject var activityCenter: ActivityCenter
     @State private var showAddWorktree = false
     @State private var showAddRepository = false
     @State private var showCreatePR = false
@@ -60,6 +61,20 @@ struct ContentView: View {
                         Label("Refresh", systemImage: "arrow.clockwise")
                     }
                     .help("Refresh (⌘R)")
+                }
+            }
+
+            ToolbarItem(placement: .status) {
+                if let activity = activityCenter.currentGlobal {
+                    HStack(spacing: 6) {
+                        ProgressView()
+                            .controlSize(.small)
+                        Text(activity.message)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                    .transition(.opacity)
                 }
             }
         }
@@ -132,6 +147,7 @@ struct ContentView: View {
         .onReceive(NotificationCenter.default.publisher(for: .showHelp)) { _ in
             showHelp = true
         }
+        .animation(DS.Animation.quick, value: activityCenter.currentGlobal)
     }
 
     private var navigationTitle: String {

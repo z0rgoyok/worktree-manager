@@ -4,48 +4,54 @@ import Foundation
 
 extension AppStore {
     func push(_ worktree: Worktree) async {
-        isLoading = true
-        defer { isLoading = false }
+        await withWorktreeActivity(worktreePath: worktree.path, kind: .push, message: "Pushing \(worktree.name)…") {
+            isLoading = true
+            defer { isLoading = false }
 
-        do {
-            let status = await runIO { self.git.getWorktreeStatus(at: worktree.path) }
-            try await runIO { try self.git.push(at: worktree.path, setUpstream: !status.hasRemote) }
-            await refreshWorktreeStatus(worktree)
-        } catch {
-            showError(message: error.localizedDescription)
+            do {
+                let status = await runIO { self.git.getWorktreeStatus(at: worktree.path) }
+                try await runIO { try self.git.push(at: worktree.path, setUpstream: !status.hasRemote) }
+                await refreshWorktreeStatus(worktree)
+            } catch {
+                showError(message: error.localizedDescription)
+            }
         }
     }
 
     func pull(_ worktree: Worktree) async {
-        isLoading = true
-        defer { isLoading = false }
+        await withWorktreeActivity(worktreePath: worktree.path, kind: .pull, message: "Pulling \(worktree.name)…") {
+            isLoading = true
+            defer { isLoading = false }
 
-        do {
-            try await runIO { try self.git.pull(at: worktree.path) }
-            await refreshWorktreeStatus(worktree)
-        } catch {
-            showError(message: error.localizedDescription)
+            do {
+                try await runIO { try self.git.pull(at: worktree.path) }
+                await refreshWorktreeStatus(worktree)
+            } catch {
+                showError(message: error.localizedDescription)
+            }
         }
     }
 
     func createPR(_ worktree: Worktree, title: String, body: String, baseBranch: String?) async {
-        isLoading = true
-        defer { isLoading = false }
+        await withWorktreeActivity(worktreePath: worktree.path, kind: .createPR, message: "Creating PR for \(worktree.name)…") {
+            isLoading = true
+            defer { isLoading = false }
 
-        do {
-            let status = await runIO { self.git.getWorktreeStatus(at: worktree.path) }
-            if status.hasUnpushedCommits || !status.hasRemote {
-                try await runIO { try self.git.push(at: worktree.path, setUpstream: !status.hasRemote) }
+            do {
+                let status = await runIO { self.git.getWorktreeStatus(at: worktree.path) }
+                if status.hasUnpushedCommits || !status.hasRemote {
+                    try await runIO { try self.git.push(at: worktree.path, setUpstream: !status.hasRemote) }
+                }
+
+                let prUrl = try await runIO { try self.git.createPR(at: worktree.path, title: title, body: body, baseBranch: baseBranch) }
+                await refreshWorktreeStatus(worktree)
+
+                if let url = URL(string: prUrl) {
+                    system.openURL(url)
+                }
+            } catch {
+                showError(message: error.localizedDescription)
             }
-
-            let prUrl = try await runIO { try self.git.createPR(at: worktree.path, title: title, body: body, baseBranch: baseBranch) }
-            await refreshWorktreeStatus(worktree)
-
-            if let url = URL(string: prUrl) {
-                system.openURL(url)
-            }
-        } catch {
-            showError(message: error.localizedDescription)
         }
     }
 
@@ -60,14 +66,16 @@ extension AppStore {
     func mergeBranch(_ worktree: Worktree, into targetBranch: String) async {
         guard let repo = selectedRepository else { return }
 
-        isLoading = true
-        defer { isLoading = false }
+        await withWorktreeActivity(worktreePath: worktree.path, kind: .merge, message: "Merging \(worktree.name)…") {
+            isLoading = true
+            defer { isLoading = false }
 
-        do {
-            try await runIO { try self.git.mergeBranch(at: repo.path, source: worktree.branch, into: targetBranch) }
-            await refreshWorktrees(for: repo)
-        } catch {
-            showError(message: error.localizedDescription)
+            do {
+                try await runIO { try self.git.mergeBranch(at: repo.path, source: worktree.branch, into: targetBranch) }
+                await refreshWorktrees(for: repo)
+            } catch {
+                showError(message: error.localizedDescription)
+            }
         }
     }
 }

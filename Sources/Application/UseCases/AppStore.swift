@@ -28,6 +28,7 @@ final class AppStore: ObservableObject {
     let fileSystem: FileSystemHandling
     let system: SystemOpening
     let statusStore: WorktreeStatusStore
+    let activityCenter: ActivityCenter
 
     private let ioQueue = DispatchQueue(label: "worktree-manager.io", qos: .userInitiated)
     var statusRefreshSuppressionUntilByWorktreePath: [String: Date] = [:]
@@ -56,6 +57,7 @@ final class AppStore: ObservableObject {
         fileSystem: FileSystemHandling,
         system: SystemOpening,
         statusStore: WorktreeStatusStore? = nil,
+        activityCenter: ActivityCenter? = nil,
         loadOnInit: Bool = true
     ) {
         self.git = git
@@ -65,6 +67,7 @@ final class AppStore: ObservableObject {
         self.fileSystem = fileSystem
         self.system = system
         self.statusStore = statusStore ?? WorktreeStatusStore()
+        self.activityCenter = activityCenter ?? ActivityCenter()
         self.worktreeBasePath = preferences.worktreeBasePath
         self.defaultEditorId = preferences.defaultEditorId
         self.defaultCopyPatterns = preferences.defaultCopyPatterns
@@ -82,6 +85,8 @@ final class AppStore: ObservableObject {
             // Kick off initial data loading without blocking init.
             Task {
                 guard selectedRepository != nil else { return }
+                let token = self.activityCenter.beginGlobal(kind: .initialLoad, message: "Loading workspace…")
+                defer { self.activityCenter.end(token) }
                 await refreshWorktrees()
                 await loadBranches()
             }

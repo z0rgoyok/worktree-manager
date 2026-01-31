@@ -40,6 +40,12 @@ extension AppStore {
         }
     }
 
+    func loadCopyPreview(for repo: Repository, patterns: [CopyPattern]? = nil) async -> [CopyPreviewItem] {
+        await runIO {
+            self.getCopyPreview(for: repo, patterns: patterns)
+        }
+    }
+
     func copyFiles(patterns: [CopyPattern], from sourcePath: String, to destinationPath: String) async -> CopyResult {
         var copied: [String] = []
         var skipped: [String] = []

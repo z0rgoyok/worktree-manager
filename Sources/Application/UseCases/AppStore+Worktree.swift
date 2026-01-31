@@ -9,25 +9,27 @@ extension AppStore {
             return
         }
 
-        isLoading = true
-        defer { isLoading = false }
+        await withGlobalActivity(kind: .refresh, message: "Refreshing worktrees…") {
+            isLoading = true
+            defer { isLoading = false }
 
-        do {
-            let listedWorktrees = try await runIO { try self.git.listWorktrees(at: repo.path) }
-            let enrichedWorktrees = listedWorktrees.map { worktree in
-                let baseBranch = preferences.worktreeBaseBranch(forWorktreePath: worktree.path)
-                return worktree.withBaseBranch(baseBranch)
+            do {
+                let listedWorktrees = try await runIO { try self.git.listWorktrees(at: repo.path) }
+                let enrichedWorktrees = listedWorktrees.map { worktree in
+                    let baseBranch = preferences.worktreeBaseBranch(forWorktreePath: worktree.path)
+                    return worktree.withBaseBranch(baseBranch)
+                }
+                if enrichedWorktrees != worktrees {
+                    worktrees = enrichedWorktrees
+                }
+            } catch {
+                showError(message: error.localizedDescription)
+                worktrees = []
             }
-            if enrichedWorktrees != worktrees {
-                worktrees = enrichedWorktrees
-            }
-        } catch {
-            showError(message: error.localizedDescription)
-            worktrees = []
+
+            updateWatchedPaths()
+            await refreshAllStatuses()
         }
-
-        updateWatchedPaths()
-        await refreshAllStatuses()
     }
 
     func loadBranches(for repo: Repository? = nil) async {
@@ -36,10 +38,12 @@ extension AppStore {
             return
         }
 
-        do {
-            branches = try await runIO { try self.git.listBranches(at: repo.path) }
-        } catch {
-            branches = []
+        await withGlobalActivity(kind: .refresh, message: "Loading branches…") {
+            do {
+                branches = try await runIO { try self.git.listBranches(at: repo.path) }
+            } catch {
+                branches = []
+            }
         }
     }
 
@@ -60,41 +64,47 @@ extension AppStore {
             return
         }
 
-        isLoading = true
-        defer { isLoading = false }
+        let basePath = worktreeBasePath
+        let repoName = repo.name
+        let parentPath = "\(basePath)/\(repoName)"
+        let worktreePath = "\(parentPath)/\(name)"
 
-        do {
-            let basePath = worktreeBasePath
-            let repoName = repo.name
-            let parentPath = "\(basePath)/\(repoName)"
-            let worktreePath = "\(parentPath)/\(name)"
+        await withWorktreeActivity(
+            worktreePath: worktreePath,
+            kind: .createWorktree,
+            message: "Creating \(name)…"
+        ) {
+            isLoading = true
+            defer { isLoading = false }
 
-            try await runIO { try self.fileSystem.createDirectory(atPath: parentPath, withIntermediateDirectories: true) }
-            try await runIO {
-                try self.git.createWorktree(
-                    at: repo.path,
-                    worktreePath: worktreePath,
-                    branch: branch,
-                    createBranch: createNewBranch,
-                    baseBranch: baseBranch
-                )
+            do {
+                try await runIO { try self.fileSystem.createDirectory(atPath: parentPath, withIntermediateDirectories: true) }
+                try await runIO {
+                    try self.git.createWorktree(
+                        at: repo.path,
+                        worktreePath: worktreePath,
+                        branch: branch,
+                        createBranch: createNewBranch,
+                        baseBranch: baseBranch
+                    )
+                }
+
+                if let baseBranch {
+                    preferences.setWorktreeBaseBranch(baseBranch, forWorktreePath: worktreePath)
+                }
+
+                // Copy files from main worktree
+                let patterns = copyPatterns ?? effectiveCopyPatterns(for: repo)
+                if !patterns.isEmpty {
+                    let result = await copyFiles(patterns: patterns, from: repo.path, to: worktreePath)
+                    lastCopyResult = result
+                }
+
+                await refreshWorktrees(for: repo)
+                await loadBranches(for: repo)
+            } catch {
+                showError(message: error.localizedDescription)
             }
-
-            if let baseBranch {
-                preferences.setWorktreeBaseBranch(baseBranch, forWorktreePath: worktreePath)
-            }
-
-            // Copy files from main worktree
-            let patterns = copyPatterns ?? effectiveCopyPatterns(for: repo)
-            if !patterns.isEmpty {
-                let result = await copyFiles(patterns: patterns, from: repo.path, to: worktreePath)
-                lastCopyResult = result
-            }
-
-            await refreshWorktrees(for: repo)
-            await loadBranches(for: repo)
-        } catch {
-            showError(message: error.localizedDescription)
         }
     }
 
@@ -105,42 +115,47 @@ extension AppStore {
 
     func recreateBranchAndWorktree(name: String, branch: String, baseBranch: String, copyPatterns: [CopyPattern]? = nil) async {
         guard let repo = selectedRepository else { return }
+        let basePath = worktreeBasePath
+        let repoName = repo.name
+        let parentPath = "\(basePath)/\(repoName)"
+        let worktreePath = "\(parentPath)/\(name)"
 
-        isLoading = true
-        defer { isLoading = false }
+        await withWorktreeActivity(
+            worktreePath: worktreePath,
+            kind: .createWorktree,
+            message: "Recreating \(name)…"
+        ) {
+            isLoading = true
+            defer { isLoading = false }
 
-        do {
-            try await runIO { try self.git.deleteBranch(at: repo.path, branch: branch, force: true) }
+            do {
+                try await runIO { try self.git.deleteBranch(at: repo.path, branch: branch, force: true) }
 
-            let basePath = worktreeBasePath
-            let repoName = repo.name
-            let parentPath = "\(basePath)/\(repoName)"
-            let worktreePath = "\(parentPath)/\(name)"
+                try await runIO { try self.fileSystem.createDirectory(atPath: parentPath, withIntermediateDirectories: true) }
+                try await runIO {
+                    try self.git.createWorktree(
+                        at: repo.path,
+                        worktreePath: worktreePath,
+                        branch: branch,
+                        createBranch: true,
+                        baseBranch: baseBranch
+                    )
+                }
 
-            try await runIO { try self.fileSystem.createDirectory(atPath: parentPath, withIntermediateDirectories: true) }
-            try await runIO {
-                try self.git.createWorktree(
-                    at: repo.path,
-                    worktreePath: worktreePath,
-                    branch: branch,
-                    createBranch: true,
-                    baseBranch: baseBranch
-                )
+                preferences.setWorktreeBaseBranch(baseBranch, forWorktreePath: worktreePath)
+
+                // Copy files from main worktree
+                let patterns = copyPatterns ?? effectiveCopyPatterns(for: repo)
+                if !patterns.isEmpty {
+                    let result = await copyFiles(patterns: patterns, from: repo.path, to: worktreePath)
+                    lastCopyResult = result
+                }
+
+                await refreshWorktrees(for: repo)
+                await loadBranches(for: repo)
+            } catch {
+                showError(message: error.localizedDescription)
             }
-
-            preferences.setWorktreeBaseBranch(baseBranch, forWorktreePath: worktreePath)
-
-            // Copy files from main worktree
-            let patterns = copyPatterns ?? effectiveCopyPatterns(for: repo)
-            if !patterns.isEmpty {
-                let result = await copyFiles(patterns: patterns, from: repo.path, to: worktreePath)
-                lastCopyResult = result
-            }
-
-            await refreshWorktrees(for: repo)
-            await loadBranches(for: repo)
-        } catch {
-            showError(message: error.localizedDescription)
         }
     }
 
@@ -179,43 +194,56 @@ extension AppStore {
             return
         }
 
-        isLoading = true
-        defer { isLoading = false }
+        await withWorktreeActivity(
+            worktreePath: worktree.path,
+            kind: .completeWorktree,
+            message: "Completing \(worktree.name)…"
+        ) {
+            isLoading = true
+            defer { isLoading = false }
 
-        do {
-            // Step 1: Merge into target branch if requested
-            if options.mergeIntoTarget {
-                try await runIO { try self.git.mergeBranch(at: repo.path, source: worktree.branch, into: options.targetBranch) }
-            }
-
-            // Step 2: Pull latest changes to target branch if requested
-            if options.pullTargetFirst {
-                // Find worktree for target branch to pull there
-                let worktrees = try await runIO { try self.git.listWorktrees(at: repo.path) }
-                if let targetWorktree = worktrees.first(where: { $0.branch == options.targetBranch }) {
-                    try await runIO { try self.git.pull(at: targetWorktree.path) }
+            do {
+                // Step 1: Merge into target branch if requested
+                if options.mergeIntoTarget {
+                    try await runIO { try self.git.mergeBranch(at: repo.path, source: worktree.branch, into: options.targetBranch) }
                 }
+
+                // Step 2: Pull latest changes to target branch if requested
+                if options.pullTargetFirst {
+                    // Find worktree for target branch to pull there
+                    let worktrees = try await runIO { try self.git.listWorktrees(at: repo.path) }
+                    if let targetWorktree = worktrees.first(where: { $0.branch == options.targetBranch }) {
+                        try await runIO { try self.git.pull(at: targetWorktree.path) }
+                    }
+                }
+
+                // Step 3: Remove the worktree directory
+                try await runIO { try self.git.removeWorktree(at: repo.path, worktreePath: worktree.path, force: options.force) }
+
+                preferences.removeWorktreeBaseBranch(forWorktreePath: worktree.path)
+
+                // Step 4: Delete local branch if requested
+                if options.deleteLocalBranch && !worktree.branch.isEmpty && worktree.branch != "detached HEAD" {
+                    try? await runIO { try self.git.deleteBranch(at: repo.path, branch: worktree.branch, force: options.force) }
+                }
+
+                // Step 5: Delete remote branch if requested
+                if options.deleteRemoteBranch && !worktree.branch.isEmpty {
+                    try? await runIO { try self.git.deleteRemoteBranch(at: repo.path, branch: worktree.branch) }
+                }
+
+                await refreshWorktrees(for: repo)
+                await loadBranches(for: repo)
+            } catch {
+                showError(message: error.localizedDescription)
             }
+        }
+    }
 
-            // Step 3: Remove the worktree directory
-            try await runIO { try self.git.removeWorktree(at: repo.path, worktreePath: worktree.path, force: options.force) }
-
-            preferences.removeWorktreeBaseBranch(forWorktreePath: worktree.path)
-
-            // Step 4: Delete local branch if requested
-            if options.deleteLocalBranch && !worktree.branch.isEmpty && worktree.branch != "detached HEAD" {
-                try? await runIO { try self.git.deleteBranch(at: repo.path, branch: worktree.branch, force: options.force) }
-            }
-
-            // Step 5: Delete remote branch if requested
-            if options.deleteRemoteBranch && !worktree.branch.isEmpty {
-                try? await runIO { try self.git.deleteRemoteBranch(at: repo.path, branch: worktree.branch) }
-            }
-
-            await refreshWorktrees(for: repo)
-            await loadBranches(for: repo)
-        } catch {
-            showError(message: error.localizedDescription)
+    func loadHasRemoteBranch(for worktree: Worktree) async -> Bool {
+        guard let repo = selectedRepository else { return false }
+        return await runIO {
+            self.git.hasRemoteBranch(at: repo.path, branch: worktree.branch)
         }
     }
 
@@ -227,34 +255,37 @@ extension AppStore {
 
     func lockWorktree(_ worktree: Worktree) async {
         guard let repo = selectedRepository else { return }
-
-        do {
-            try await runIO { try self.git.lockWorktree(at: repo.path, worktreePath: worktree.path, reason: nil) }
-            await refreshWorktrees(for: repo)
-        } catch {
-            showError(message: error.localizedDescription)
+        await withWorktreeActivity(worktreePath: worktree.path, kind: .lock, message: "Locking \(worktree.name)…") {
+            do {
+                try await runIO { try self.git.lockWorktree(at: repo.path, worktreePath: worktree.path, reason: nil) }
+                await refreshWorktrees(for: repo)
+            } catch {
+                showError(message: error.localizedDescription)
+            }
         }
     }
 
     func unlockWorktree(_ worktree: Worktree) async {
         guard let repo = selectedRepository else { return }
-
-        do {
-            try await runIO { try self.git.unlockWorktree(at: repo.path, worktreePath: worktree.path) }
-            await refreshWorktrees(for: repo)
-        } catch {
-            showError(message: error.localizedDescription)
+        await withWorktreeActivity(worktreePath: worktree.path, kind: .unlock, message: "Unlocking \(worktree.name)…") {
+            do {
+                try await runIO { try self.git.unlockWorktree(at: repo.path, worktreePath: worktree.path) }
+                await refreshWorktrees(for: repo)
+            } catch {
+                showError(message: error.localizedDescription)
+            }
         }
     }
 
     func pruneWorktrees() async {
         guard let repo = selectedRepository else { return }
-
-        do {
-            try await runIO { try self.git.pruneWorktrees(at: repo.path) }
-            await refreshWorktrees(for: repo)
-        } catch {
-            showError(message: error.localizedDescription)
+        await withGlobalActivity(kind: .prune, message: "Pruning worktrees…") {
+            do {
+                try await runIO { try self.git.pruneWorktrees(at: repo.path) }
+                await refreshWorktrees(for: repo)
+            } catch {
+                showError(message: error.localizedDescription)
+            }
         }
     }
 }

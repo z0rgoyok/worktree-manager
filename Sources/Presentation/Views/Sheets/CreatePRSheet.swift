@@ -8,6 +8,8 @@ struct CreatePRSheet: View {
     @State private var title: String = ""
     @State private var prDescription: String = ""
     @State private var baseBranch: String = "main"
+    @State private var isPreparing = false
+    @State private var isSubmitting = false
 
     private var baseBranches: [String] {
         let common = ["main", "master", "develop"]
@@ -57,27 +59,48 @@ struct CreatePRSheet: View {
 
                 Button("Create PR") {
                     Task {
+                        isSubmitting = true
                         await store.createPR(
                             worktree,
                             title: title.isEmpty ? worktree.branch : title,
                             body: prDescription,
                             baseBranch: baseBranch
                         )
+                        isSubmitting = false
+                        dismiss()
                     }
-                    dismiss()
                 }
                 .keyboardShortcut(.defaultAction)
                 .buttonStyle(.borderedProminent)
+                .disabled(store.branches.isEmpty || isPreparing || isSubmitting)
             }
         }
         .padding(24)
         .frame(width: 420)
-        .onAppear {
-            title = worktree.branch
-            if let main = baseBranches.first {
-                baseBranch = main
+        .overlay {
+            if isPreparing {
+                BlockingProgressOverlay(title: "Preparing…")
+            } else if isSubmitting {
+                BlockingProgressOverlay(title: "Creating pull request…")
             }
+        }
+        .task {
+            await prepare()
+        }
+    }
+
+    private func prepare() async {
+        guard !isPreparing else { return }
+        isPreparing = true
+        defer { isPreparing = false }
+
+        if store.branches.isEmpty {
+            await store.loadBranches()
+        }
+
+        title = worktree.branch
+        if let main = baseBranches.first {
+            baseBranch = main
         }
     }
 }
-

@@ -2,6 +2,7 @@ import SwiftUI
 
 struct WorktreeTreeRow: View {
     @EnvironmentObject var store: AppStore
+    @EnvironmentObject var activityCenter: ActivityCenter
     let worktree: Worktree
     let repository: Repository
     @Binding var selection: SidebarSelection?
@@ -62,6 +63,12 @@ struct WorktreeTreeRow: View {
             .help(worktree.path)
 
             Spacer()
+
+            if activityCenter.currentActivity(forWorktreePath: worktree.path) != nil {
+                ProgressView()
+                    .controlSize(.mini)
+                    .transition(.opacity)
+            }
         }
         .padding(.horizontal, DS.Spacing.md)
         .padding(.vertical, DS.Spacing.sm)
@@ -74,86 +81,23 @@ struct WorktreeTreeRow: View {
         .padding(.horizontal, DS.Spacing.xs)
         .contentShape(Rectangle())
         .onHover { isHovered = $0 }
-        .onTapGesture {
-            selection = .worktree(worktree, inRepository: repository)
+        .overlay {
+            RightClickHandlerView(
+                onLeftClick: {
+                    selection = .worktree(worktree, inRepository: repository)
+                    store.selectedWorktree = worktree
+                },
+                onRightClick: {
+                    selection = .worktree(worktree, inRepository: repository)
+                    store.selectedWorktree = worktree
+                }
+            )
+            .allowsHitTesting(true)
+            .accessibilityHidden(true)
         }
         .contextMenu {
-            // Open actions
-            Section {
-                Button("Open in Editor") {
-                    store.openInEditor(worktree)
-                }
-
-                Menu("Open in...") {
-                    ForEach(store.configuredEditors) { editor in
-                        Button(editor.name) {
-                            store.openInEditor(worktree, editor: editor)
-                        }
-                    }
-                }
-            }
-
-            Section {
-                Button("Show in Finder") {
-                    store.openInFinder(worktree)
-                }
-
-                Button("Open in Terminal") {
-                    store.openInTerminal(worktree)
-                }
-
-                Button("Copy Path") {
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(worktree.path, forType: .string)
-                }
-            }
-
-            // Git actions (non-main only)
-            if !worktree.isMain {
-                Section {
-                    Button("Push") {
-                        Task { await store.push(worktree) }
-                    }
-
-                    Button("Pull") {
-                        Task { await store.pull(worktree) }
-                    }
-                }
-
-                // PR actions
-                Section {
-                    if let status = statusCell.value, let pr = status.prStatus {
-                        Button(pr.isMerged ? "View Merged PR" : "View PR #\(pr.number)") {
-                            store.openPR(worktree)
-                        }
-                    } else {
-                        Button("Create Pull Request...") {
-                            store.selectedWorktree = worktree
-                            NotificationCenter.default.post(name: .showCreatePR, object: nil)
-                        }
-                    }
-                }
-
-                Section {
-                    if worktree.isLocked {
-                        Button("Unlock") {
-                            Task { await store.unlockWorktree(worktree) }
-                        }
-                    } else {
-                        Button("Lock") {
-                            Task { await store.lockWorktree(worktree) }
-                        }
-                    }
-                }
-
-                Section {
-                    Button("Finish Worktree...") {
-                        store.selectedWorktree = worktree
-                        NotificationCenter.default.post(name: .showFinishWorktree, object: nil)
-                    }
-                }
-            }
+            WorktreeMenuItems(store: store, worktree: worktree, includeNewWorktree: false)
         }
+        .animation(DS.Animation.quick, value: activityCenter.currentActivity(forWorktreePath: worktree.path) != nil)
     }
 }
-

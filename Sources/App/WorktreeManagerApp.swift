@@ -8,6 +8,7 @@ struct WorktreeManagerApp: App {
         WindowGroup {
             ContentView()
                 .environmentObject(store)
+                .environmentObject(store.activityCenter)
         }
         .windowStyle(.titleBar)
         .windowToolbarStyle(.unified(showsTitle: true))
@@ -30,6 +31,7 @@ struct WorktreeManagerApp: App {
         Settings {
             SettingsView()
                 .environmentObject(store)
+                .environmentObject(store.activityCenter)
         }
     }
 }
