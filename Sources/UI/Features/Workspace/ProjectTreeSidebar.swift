@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 /// Native tree sidebar showing projects with worktrees nested inside
 struct ProjectTreeSidebar: View {
@@ -10,11 +11,22 @@ struct ProjectTreeSidebar: View {
     @State private var repositoryForCopySettings: Repository?
     @State private var worktreesCache: [UUID: [Worktree]] = [:]  // repo.id -> worktrees
     @State private var loadingRepositories: Set<UUID> = []
+    @FocusState private var isKeyboardFocused: Bool
 
     var body: some View {
         content
             .frame(minWidth: DS.Sizes.sidebarMinWidth)
             .background(DS.Colors.surfacePrimary)
+            .background(
+                KeyDownHandlerView(isActive: isKeyboardFocused, onKeyDown: handleKeyDown)
+            )
+            .focusable(true)
+            .focused($isKeyboardFocused)
+            .simultaneousGesture(
+                TapGesture().onEnded {
+                    isKeyboardFocused = true
+                }
+            )
             .toolbar { sidebarToolbar }
             .sheet(item: $repositoryForCopySettings) { repo in
                 RepositoryCopyPatternsSheet(repository: repo)
@@ -25,6 +37,7 @@ struct ProjectTreeSidebar: View {
                 }
                 restoreExpandedRepositoriesIfNeeded()
                 initializeSelection()
+                isKeyboardFocused = true
             }
             .onChange(of: expandedRepositories) { _, expanded in
                 workspace.setExpandedRepositoryIds(expanded)
@@ -179,20 +192,27 @@ struct ProjectTreeSidebar: View {
     }
 
     private var repositoriesTree: some View {
-        ScrollView {
-            LazyVStack(spacing: 0) {
-                ForEach(workspace.state.repositories) { repo in
-                    ProjectTreeNode(
-                        repository: repo,
-                        selection: $selection,
-                        isExpanded: expansionBinding(for: repo),
-                        worktrees: worktrees(for: repo),
-                        isLoadingWorktrees: isLoading(repo: repo),
-                        onCopySettings: { repositoryForCopySettings = repo }
-                    )
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(spacing: 0) {
+                    ForEach(workspace.state.repositories) { repo in
+                        ProjectTreeNode(
+                            repository: repo,
+                            selection: $selection,
+                            isExpanded: expansionBinding(for: repo),
+                            worktrees: worktrees(for: repo),
+                            isLoadingWorktrees: isLoading(repo: repo),
+                            onCopySettings: { repositoryForCopySettings = repo }
+                        )
+                        .id(AnyHashable(repo.id))
+                    }
                 }
+                .padding(.vertical, DS.Spacing.xs)
             }
-            .padding(.vertical, DS.Spacing.xs)
+            .onChange(of: selection) { _, newSelection in
+                guard let newSelection else { return }
+                proxy.scrollTo(scrollId(for: newSelection), anchor: .center)
+            }
         }
     }
 
@@ -318,6 +338,50 @@ struct ProjectTreeSidebar: View {
         }
 
         ensureWorktreesLoadedForExpandedRepositories()
+    }
+
+    private func handleKeyDown(_ event: NSEvent) -> Bool {
+        guard let key = navigationKey(for: event) else { return false }
+
+        let output = SidebarKeyboardNavigation.handle(
+            key: key,
+            selection: selection,
+            repositories: workspace.state.repositories,
+            expandedRepositoryIds: expandedRepositories,
+            worktreesByRepositoryId: worktreesCache
+        )
+
+        if output.expandedRepositoryIds != expandedRepositories {
+            expandedRepositories = output.expandedRepositoryIds
+        }
+
+        for repoId in output.repositoryIdsToLoadWorktrees {
+            guard let repo = workspace.state.repositories.first(where: { $0.id == repoId }) else { continue }
+            loadWorktrees(for: repo)
+        }
+
+        selection = output.selection
+        return true
+    }
+
+    private func navigationKey(for event: NSEvent) -> SidebarKeyboardNavigation.Key? {
+        switch event.keyCode {
+        case 126: return .up
+        case 125: return .down
+        case 123: return .left
+        case 124: return .right
+        case 49: return .space
+        default: return nil
+        }
+    }
+
+    private func scrollId(for selection: SidebarSelection) -> AnyHashable {
+        switch selection {
+        case .repository(let repo):
+            return AnyHashable(repo.id)
+        case .worktree(let worktree, _):
+            return AnyHashable(worktree.id)
+        }
     }
 }
 

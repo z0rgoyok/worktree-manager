@@ -36,6 +36,7 @@ final class WorkspaceComponent: ObservableObject {
 
     private let store: AppStore
     private var cancellables: Set<AnyCancellable> = []
+    private var sidebarSelectionTask: Task<Void, Never>?
 
     init(store: AppStore) {
         self.store = store
@@ -64,8 +65,13 @@ final class WorkspaceComponent: ObservableObject {
                 }
             }
         case .setSidebarSelection(let selection):
-            Task { [weak self] in
+            // Update UI state immediately so keyboard navigation feels synchronous.
+            state.sidebarSelection = selection
+
+            sidebarSelectionTask?.cancel()
+            sidebarSelectionTask = Task { [weak self] in
                 guard let self else { return }
+                defer { self.sidebarSelectionTask = nil }
                 await self.applySidebarSelection(selection)
             }
         }
@@ -357,6 +363,7 @@ final class WorkspaceComponent: ObservableObject {
     }
 
     private func applySidebarSelection(_ selection: SidebarSelection?) async {
+        if Task.isCancelled { return }
         state.sidebarSelection = selection
 
         guard let selection else {
@@ -367,12 +374,15 @@ final class WorkspaceComponent: ObservableObject {
         if store.selectedRepository?.id != selection.repository.id {
             do {
                 try await store.selectRepository(selection.repository)
+                if Task.isCancelled { return }
             } catch {
+                if error is CancellationError { return }
                 effectsEmitter.emit(.showAlert(title: "Error", message: error.localizedDescription))
                 return
             }
         }
 
+        if Task.isCancelled { return }
         if case .worktree(let wt, _) = selection {
             store.selectedWorktree = wt
         } else {
@@ -381,6 +391,10 @@ final class WorkspaceComponent: ObservableObject {
     }
 
     private func syncSidebarSelectionWithStore() {
+        // Avoid overwriting selection while a user-initiated navigation is in progress.
+        // The task will set the final selection when it completes.
+        if sidebarSelectionTask != nil { return }
+
         if let repo = store.selectedRepository {
             if let worktree = store.selectedWorktree {
                 state.sidebarSelection = .worktree(worktree, inRepository: repo)

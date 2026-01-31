@@ -156,6 +156,7 @@ struct ProjectTreeNode: View {
                     selection: $selection,
                     statusCell: workspace.statusCell(for: worktree.path)
                 )
+                .id(AnyHashable(worktree.id))
             }
         }
     }
