@@ -6,6 +6,7 @@ protocol PreferencesStore {
 
     var worktreeBasePath: String { get set }
     var defaultEditorId: String { get set }
+    var expandedRepositoryIds: Set<UUID> { get set }
 
     func preferredBaseBranch(forRepositoryId id: UUID) -> String?
     func setPreferredBaseBranch(_ branch: String, forRepositoryId id: UUID)
@@ -27,4 +28,3 @@ protocol PreferencesStore {
     /// Effective patterns for a repository (per-repo if set, otherwise defaults)
     func effectiveCopyPatterns(forRepositoryId id: UUID) -> [CopyPattern]
 }
-

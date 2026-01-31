@@ -5,6 +5,7 @@ final class InMemoryPreferencesStore: PreferencesStore {
     var repositories: [Repository]
     var worktreeBasePath: String
     var defaultEditorId: String
+    var expandedRepositoryIds: Set<UUID> = []
     var defaultCopyPatterns: [CopyPattern] = []
     private var preferredBaseBranches: [UUID: String] = [:]
     private var worktreeBaseBranches: [String: String] = [:]
@@ -69,4 +70,3 @@ final class InMemoryPreferencesStore: PreferencesStore {
         repoCopyPatterns[id] ?? defaultCopyPatterns
     }
 }
-

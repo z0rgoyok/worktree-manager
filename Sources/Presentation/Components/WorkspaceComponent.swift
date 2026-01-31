@@ -184,6 +184,14 @@ final class WorkspaceComponent: ObservableObject {
         store.configuredEditors
     }
 
+    func loadExpandedRepositoryIds() -> Set<UUID> {
+        store.preferences.expandedRepositoryIds
+    }
+
+    func setExpandedRepositoryIds(_ ids: Set<UUID>) {
+        store.preferences.expandedRepositoryIds = ids
+    }
+
     func push(_ worktree: Worktree) async {
         do {
             try await store.push(worktree)

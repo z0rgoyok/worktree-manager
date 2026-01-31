@@ -11,6 +11,7 @@ final class StorageService {
     private let worktreeBasePathKey = "worktreeBasePath"
     private let preferredBaseBranchesKey = "preferredBaseBranches"
     private let worktreeBaseBranchesKey = "worktreeBaseBranches"
+    private let expandedRepositoriesKey = "expandedRepositories"
 
     private init() {}
 
@@ -75,6 +76,20 @@ final class StorageService {
     private var defaultWorktreeBasePath: String {
         let home = FileManager.default.homeDirectoryForCurrentUser.path
         return "\(home)/worktrees"
+    }
+
+    // MARK: - Sidebar Expansion (UI)
+
+    var expandedRepositoryIds: Set<UUID> {
+        get {
+            let strings = defaults.array(forKey: expandedRepositoriesKey) as? [String] ?? []
+            let ids = strings.compactMap(UUID.init(uuidString:))
+            return Set(ids)
+        }
+        set {
+            let strings = newValue.map(\.uuidString).sorted()
+            defaults.set(strings, forKey: expandedRepositoriesKey)
+        }
     }
 
     // MARK: - Preferred Base Branches
