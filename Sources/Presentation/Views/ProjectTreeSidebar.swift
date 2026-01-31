@@ -122,10 +122,9 @@ struct ProjectTreeSidebar: View {
             initializeSelection()
         }
         .onChange(of: store.repositories) { _, repos in
-            // When repositories load, expand all and sync selection
-            for repo in repos {
-                expandedRepositories.insert(repo.id)
-            }
+            // Drop expansion state for repositories that no longer exist.
+            expandedRepositories = expandedRepositories.intersection(Set(repos.map(\.id)))
+
             if selection == nil, let repo = store.selectedRepository {
                 selection = .repository(repo)
             }
@@ -135,18 +134,25 @@ struct ProjectTreeSidebar: View {
             if let repo = repo, selection?.repository.id != repo.id {
                 selection = .repository(repo)
                 expandedRepositories.insert(repo.id)
+                if worktreesCache[repo.id] == nil {
+                    loadWorktrees(for: repo)
+                }
             }
         }
         .onChange(of: store.worktrees) { _, worktrees in
             // Sync worktrees cache for selected repository
             if let repo = store.selectedRepository {
                 worktreesCache[repo.id] = worktrees
+                loadingRepositories.remove(repo.id)
             }
         }
         .onChange(of: selection) { _, newSelection in
             // Auto-expand when selecting a worktree
             if let sel = newSelection {
                 expandedRepositories.insert(sel.repository.id)
+                if worktreesCache[sel.repository.id] == nil {
+                    loadWorktrees(for: sel.repository)
+                }
             }
         }
     }
@@ -168,29 +174,36 @@ struct ProjectTreeSidebar: View {
         Task {
             // Use store's git client to load worktrees without changing selection
             if store.selectedRepository?.id == repo.id {
-                // Already selected — use store's worktrees
-                worktreesCache[repo.id] = store.worktrees
+                // Selected repository: rely on the store's selected worktrees (loaded elsewhere),
+                // and keep a loading placeholder until they arrive.
+                if !store.worktrees.isEmpty {
+                    worktreesCache[repo.id] = store.worktrees
+                    loadingRepositories.remove(repo.id)
+                }
             } else {
                 // Load independently without changing selection
                 let loadedWorktrees = await store.loadWorktreesOnly(for: repo)
                 worktreesCache[repo.id] = loadedWorktrees
+                loadingRepositories.remove(repo.id)
             }
-            loadingRepositories.remove(repo.id)
         }
     }
 
     private func initializeSelection() {
-        // Auto-expand selected repository
         if let sel = selection {
             expandedRepositories.insert(sel.repository.id)
+            if worktreesCache[sel.repository.id] == nil {
+                loadWorktrees(for: sel.repository)
+            }
+            return
         }
-        // Expand all by default for better UX
-        for repo in store.repositories {
-            expandedRepositories.insert(repo.id)
-        }
-        // Sync selection with store
-        if selection == nil, let repo = store.selectedRepository {
+
+        if let repo = store.selectedRepository {
             selection = .repository(repo)
+            expandedRepositories.insert(repo.id)
+            if worktreesCache[repo.id] == nil {
+                loadWorktrees(for: repo)
+            }
         }
     }
 }

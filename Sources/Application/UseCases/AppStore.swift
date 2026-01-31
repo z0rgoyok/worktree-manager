@@ -71,7 +71,20 @@ final class AppStore: ObservableObject {
 
         if loadOnInit {
             setupFileSystemWatcher()
-            Task { await loadRepositories() }
+
+            // Bootstrap repositories synchronously to avoid a transient empty UI state on app launch.
+            repositories = preferences.loadRepositories()
+            if selectedRepository == nil {
+                selectedRepository = repositories.first
+            }
+            updateWatchedPaths()
+
+            // Kick off initial data loading without blocking init.
+            Task {
+                guard selectedRepository != nil else { return }
+                await refreshWorktrees()
+                await loadBranches()
+            }
         }
     }
 
