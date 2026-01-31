@@ -164,14 +164,6 @@ final class WorkspaceComponent: ObservableObject {
         store.openInTerminal(worktree)
     }
 
-    func openInEditor(_ worktree: Worktree) {
-        do {
-            try store.openInEditor(worktree)
-        } catch {
-            effectsEmitter.emit(.showAlert(title: "Error", message: error.localizedDescription))
-        }
-    }
-
     func openInEditor(_ worktree: Worktree, editor: Editor) {
         do {
             try store.openInEditor(worktree, editor: editor)
@@ -192,31 +184,38 @@ final class WorkspaceComponent: ObservableObject {
         }
     }
 
-    func preferredEditor(for worktree: Worktree) -> Editor? {
-        store.preferredEditor(for: worktree)
+    /// Preferred editor for current repository
+    func preferredEditor() -> Editor? {
+        guard let repo = state.selectedRepository else { return nil }
+        return store.preferredEditor(for: repo)
     }
 
-    func setPreferredEditor(_ editor: Editor, for worktree: Worktree) {
-        store.setPreferredEditor(editor, for: worktree)
+    func setPreferredEditor(_ editor: Editor) {
+        guard let repo = state.selectedRepository else { return }
+        objectWillChange.send()
+        store.setPreferredEditor(editor, for: repo)
     }
 
-    func clearPreferredEditor(for worktree: Worktree) {
-        store.clearPreferredEditor(for: worktree)
+    func clearPreferredEditor() {
+        guard let repo = state.selectedRepository else { return }
+        objectWillChange.send()
+        store.clearPreferredEditor(for: repo)
     }
 
-    /// Opens worktree in editor, using remembered editor if available
-    func smartOpenInEditor(_ worktree: Worktree) {
-        if rememberEditorChoice, let editor = preferredEditor(for: worktree) {
+    /// Opens worktree in remembered editor if available, returns true if opened
+    @discardableResult
+    func smartOpenInEditor(_ worktree: Worktree) -> Bool {
+        if rememberEditorChoice, let editor = preferredEditor() {
             openInEditor(worktree, editor: editor)
-        } else {
-            openInEditor(worktree)
+            return true
         }
+        return false
     }
 
     /// Opens worktree in specific editor and optionally remembers choice
     func openInEditorAndRemember(_ worktree: Worktree, editor: Editor) {
         if rememberEditorChoice {
-            setPreferredEditor(editor, for: worktree)
+            setPreferredEditor(editor)
         }
         openInEditor(worktree, editor: editor)
     }

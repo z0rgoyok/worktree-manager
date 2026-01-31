@@ -9,11 +9,6 @@ extension AppStore {
         updateWatchedPaths()
     }
 
-    func setDefaultEditorId(_ id: String) {
-        defaultEditorId = id
-        preferences.defaultEditorId = id
-    }
-
     func preferredBaseBranch() -> String? {
         guard let repo = selectedRepository else { return nil }
         return preferences.preferredBaseBranch(forRepositoryId: repo.id)

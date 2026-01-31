@@ -2,8 +2,6 @@ import SwiftUI
 
 struct GeneralSettingsView: View {
     @Binding var worktreeBasePath: String
-    @Binding var defaultEditorId: String
-    let availableEditors: [Editor]
 
     var body: some View {
         Form {
@@ -18,20 +16,6 @@ struct GeneralSettingsView: View {
                 }
 
                 Text("New worktrees will be created in subdirectories here")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
-            Section {
-                Picker("Default Editor", selection: $defaultEditorId) {
-                    Text("Always Ask").tag("")
-
-                    ForEach(availableEditors) { editor in
-                        Text(editor.name).tag(editor.id)
-                    }
-                }
-
-                Text("The editor to open worktrees with by default")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

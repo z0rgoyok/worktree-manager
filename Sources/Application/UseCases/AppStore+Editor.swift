@@ -8,19 +8,6 @@ extension AppStore {
         editorOpener.availableEditors()
     }
 
-    /// Default editor from preferences
-    var defaultEditor: Editor? {
-        configuredEditors.first { $0.id == defaultEditorId } ?? configuredEditors.first
-    }
-
-    /// Open worktree in the default editor
-    func openInEditor(_ worktree: Worktree) throws {
-        guard let editor = defaultEditor else {
-            throw AppStoreError.noEditorConfigured
-        }
-        try openInEditor(worktree, editor: editor)
-    }
-
     func openInEditor(_ worktree: Worktree, editor: Editor) throws {
         try editorOpener.open(path: worktree.path, with: editor)
     }
@@ -37,25 +24,25 @@ extension AppStore {
         editorOpener.availableEditors()
     }
 
-    // MARK: - Remember Editor Choice
+    // MARK: - Remember Editor Choice (per repository)
 
     var rememberEditorChoice: Bool {
         get { preferences.rememberEditorChoice }
         set { preferences.rememberEditorChoice = newValue }
     }
 
-    func preferredEditor(for worktree: Worktree) -> Editor? {
-        guard let editorId = preferences.preferredEditorId(forWorktreePath: worktree.path) else {
+    func preferredEditor(for repository: Repository) -> Editor? {
+        guard let editorId = preferences.preferredEditorId(forRepositoryId: repository.id) else {
             return nil
         }
         return configuredEditors.first { $0.id == editorId }
     }
 
-    func setPreferredEditor(_ editor: Editor, for worktree: Worktree) {
-        preferences.setPreferredEditorId(editor.id, forWorktreePath: worktree.path)
+    func setPreferredEditor(_ editor: Editor, for repository: Repository) {
+        preferences.setPreferredEditorId(editor.id, forRepositoryId: repository.id)
     }
 
-    func clearPreferredEditor(for worktree: Worktree) {
-        preferences.removePreferredEditorId(forWorktreePath: worktree.path)
+    func clearPreferredEditor(for repository: Repository) {
+        preferences.removePreferredEditorId(forRepositoryId: repository.id)
     }
 }

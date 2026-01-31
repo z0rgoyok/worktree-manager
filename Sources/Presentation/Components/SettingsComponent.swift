@@ -5,9 +5,7 @@ import Combine
 final class SettingsComponent: ObservableObject {
     struct State: Equatable {
         var worktreeBasePath: String = ""
-        var defaultEditorId: String = ""
         var defaultCopyPatterns: [CopyPattern] = []
-        var availableEditors: [Editor] = []
     }
 
     @Published private(set) var state = State()
@@ -22,10 +20,6 @@ final class SettingsComponent: ObservableObject {
 
     func setWorktreeBasePath(_ newValue: String) {
         store.setWorktreeBasePath(newValue)
-    }
-
-    func setDefaultEditorId(_ newValue: String) {
-        store.setDefaultEditorId(newValue)
     }
 
     func setDefaultCopyPatterns(_ newValue: [CopyPattern]) {
@@ -49,14 +43,8 @@ final class SettingsComponent: ObservableObject {
             .sink { [weak self] in self?.state.worktreeBasePath = $0 }
             .store(in: &cancellables)
 
-        store.$defaultEditorId
-            .sink { [weak self] in self?.state.defaultEditorId = $0 }
-            .store(in: &cancellables)
-
         store.$defaultCopyPatterns
             .sink { [weak self] in self?.state.defaultCopyPatterns = $0 }
             .store(in: &cancellables)
-
-        state.availableEditors = store.availableEditors()
     }
 }

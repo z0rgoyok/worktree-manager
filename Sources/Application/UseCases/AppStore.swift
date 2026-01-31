@@ -12,7 +12,6 @@ final class AppStore: ObservableObject {
     @Published var worktrees: [Worktree] = []
     @Published var branches: [String] = []
     @Published var worktreeBasePath: String
-    @Published var defaultEditorId: String
     @Published var defaultCopyPatterns: [CopyPattern]
     @Published var isLoading = false
 
@@ -66,7 +65,6 @@ final class AppStore: ObservableObject {
         self.statusStore = statusStore ?? WorktreeStatusStore()
         self.activityCenter = activityCenter ?? ActivityCenter()
         self.worktreeBasePath = preferences.worktreeBasePath
-        self.defaultEditorId = preferences.defaultEditorId
         self.defaultCopyPatterns = preferences.defaultCopyPatterns
 
         if loadOnInit {

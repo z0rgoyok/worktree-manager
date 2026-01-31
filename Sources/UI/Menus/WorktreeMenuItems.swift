@@ -89,7 +89,7 @@ struct WorktreeMenuItems: View {
         }
 
         private var selectedEditorId: String {
-            workspace.preferredEditor(for: worktree)?.id ?? ""
+            workspace.preferredEditor()?.id ?? ""
         }
 
         var body: some View {
@@ -119,7 +119,7 @@ struct WorktreeMenuItems: View {
                     Button(workspace.rememberEditorChoice ? "Forget Editor Choice" : "Remember Editor Choice") {
                         workspace.rememberEditorChoice.toggle()
                         if !workspace.rememberEditorChoice {
-                            workspace.clearPreferredEditor(for: worktree)
+                            workspace.clearPreferredEditor()
                         }
                     }
                 }

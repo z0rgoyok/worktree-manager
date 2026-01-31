@@ -9,12 +9,7 @@ struct SettingsView: View {
                 worktreeBasePath: Binding(
                     get: { settings.state.worktreeBasePath },
                     set: { settings.setWorktreeBasePath($0) }
-                ),
-                defaultEditorId: Binding(
-                    get: { settings.state.defaultEditorId },
-                    set: { settings.setDefaultEditorId($0) }
-                ),
-                availableEditors: settings.state.availableEditors
+                )
             )
             .tabItem {
                 Label("General", systemImage: "gear")

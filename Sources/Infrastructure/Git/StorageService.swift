@@ -6,14 +6,12 @@ final class StorageService {
 
     private let defaults = UserDefaults.standard
     private let repositoriesKey = "savedRepositories"
-    private let defaultEditorKey = "defaultEditor"
-    private let defaultEditorIdKey = "defaultEditorId"
     private let worktreeBasePathKey = "worktreeBasePath"
     private let preferredBaseBranchesKey = "preferredBaseBranches"
     private let worktreeBaseBranchesKey = "worktreeBaseBranches"
     private let expandedRepositoriesKey = "expandedRepositories"
     private let rememberEditorChoiceKey = "rememberEditorChoice"
-    private let worktreePreferredEditorsKey = "worktreePreferredEditors"
+    private let repositoryPreferredEditorsKey = "repositoryPreferredEditors"
 
     private init() {}
 
@@ -32,60 +30,28 @@ final class StorageService {
         defaults.set(data, forKey: repositoriesKey)
     }
 
-    // MARK: - Default Editor
-
-    var defaultEditor: Editor? {
-        get {
-            guard let data = defaults.data(forKey: defaultEditorKey),
-                  let editor = try? JSONDecoder().decode(Editor.self, from: data) else {
-                return nil
-            }
-            return editor
-        }
-        set {
-            if let editor = newValue,
-               let data = try? JSONEncoder().encode(editor) {
-                defaults.set(data, forKey: defaultEditorKey)
-            } else {
-                defaults.removeObject(forKey: defaultEditorKey)
-            }
-        }
-    }
-
-    var defaultEditorId: String {
-        get {
-            if let id = defaults.string(forKey: defaultEditorIdKey) {
-                return id
-            }
-            return defaultEditor?.id ?? ""
-        }
-        set {
-            defaults.set(newValue, forKey: defaultEditorIdKey)
-        }
-    }
-
-    // MARK: - Remember Editor Choice
+    // MARK: - Remember Editor Choice (per repository)
 
     var rememberEditorChoice: Bool {
         get { defaults.bool(forKey: rememberEditorChoiceKey) }
         set { defaults.set(newValue, forKey: rememberEditorChoiceKey) }
     }
 
-    func preferredEditorId(forWorktreePath path: String) -> String? {
-        let dict = defaults.dictionary(forKey: worktreePreferredEditorsKey) as? [String: String] ?? [:]
-        return dict[path]
+    func preferredEditorId(forRepositoryId id: UUID) -> String? {
+        let dict = defaults.dictionary(forKey: repositoryPreferredEditorsKey) as? [String: String] ?? [:]
+        return dict[id.uuidString]
     }
 
-    func setPreferredEditorId(_ editorId: String, forWorktreePath path: String) {
-        var dict = defaults.dictionary(forKey: worktreePreferredEditorsKey) as? [String: String] ?? [:]
-        dict[path] = editorId
-        defaults.set(dict, forKey: worktreePreferredEditorsKey)
+    func setPreferredEditorId(_ editorId: String, forRepositoryId id: UUID) {
+        var dict = defaults.dictionary(forKey: repositoryPreferredEditorsKey) as? [String: String] ?? [:]
+        dict[id.uuidString] = editorId
+        defaults.set(dict, forKey: repositoryPreferredEditorsKey)
     }
 
-    func removePreferredEditorId(forWorktreePath path: String) {
-        var dict = defaults.dictionary(forKey: worktreePreferredEditorsKey) as? [String: String] ?? [:]
-        dict.removeValue(forKey: path)
-        defaults.set(dict, forKey: worktreePreferredEditorsKey)
+    func removePreferredEditorId(forRepositoryId id: UUID) {
+        var dict = defaults.dictionary(forKey: repositoryPreferredEditorsKey) as? [String: String] ?? [:]
+        dict.removeValue(forKey: id.uuidString)
+        defaults.set(dict, forKey: repositoryPreferredEditorsKey)
     }
 
     // MARK: - Worktree Base Path

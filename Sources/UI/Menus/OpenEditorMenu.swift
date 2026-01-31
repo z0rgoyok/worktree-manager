@@ -5,37 +5,62 @@ struct OpenEditorMenu: View {
     let worktree: Worktree
 
     private var selectedEditorId: String {
-        workspace.preferredEditor(for: worktree)?.id ?? ""
+        workspace.preferredEditor()?.id ?? ""
+    }
+
+    private var hasRememberedEditor: Bool {
+        workspace.rememberEditorChoice && workspace.preferredEditor() != nil
     }
 
     var body: some View {
-        Menu {
-            Picker("", selection: Binding(
-                get: { selectedEditorId },
-                set: { newId in
-                    if let editor = workspace.configuredEditors().first(where: { $0.id == newId }) {
-                        workspace.openInEditorAndRemember(worktree, editor: editor)
-                    }
-                }
-            )) {
-                ForEach(workspace.configuredEditors()) { editor in
-                    Text(editor.name).tag(editor.id)
-                }
-            }
-            .pickerStyle(.inline)
-            .labelsHidden()
+        if hasRememberedEditor {
+            menuWithPrimaryAction
+        } else {
+            menuWithoutPrimaryAction
+        }
+    }
 
-            Divider()
-            Button(workspace.rememberEditorChoice ? "Forget Editor Choice" : "Remember Editor Choice") {
-                workspace.rememberEditorChoice.toggle()
-                if !workspace.rememberEditorChoice {
-                    workspace.clearPreferredEditor(for: worktree)
-                }
-            }
+    private var menuWithPrimaryAction: some View {
+        Menu {
+            menuContent
         } label: {
             Label("Open", systemImage: "arrow.up.forward.app")
         } primaryAction: {
             workspace.smartOpenInEditor(worktree)
+        }
+    }
+
+    private var menuWithoutPrimaryAction: some View {
+        Menu {
+            menuContent
+        } label: {
+            Label("Open", systemImage: "arrow.up.forward.app")
+        }
+    }
+
+    @ViewBuilder
+    private var menuContent: some View {
+        Picker("", selection: Binding(
+            get: { selectedEditorId },
+            set: { newId in
+                if let editor = workspace.configuredEditors().first(where: { $0.id == newId }) {
+                    workspace.openInEditorAndRemember(worktree, editor: editor)
+                }
+            }
+        )) {
+            ForEach(workspace.configuredEditors()) { editor in
+                Text(editor.name).tag(editor.id)
+            }
+        }
+        .pickerStyle(.inline)
+        .labelsHidden()
+
+        Divider()
+        Button(workspace.rememberEditorChoice ? "Forget Editor Choice" : "Remember Editor Choice") {
+            workspace.rememberEditorChoice.toggle()
+            if !workspace.rememberEditorChoice {
+                workspace.clearPreferredEditor()
+            }
         }
     }
 }
