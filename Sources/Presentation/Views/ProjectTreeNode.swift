@@ -124,24 +124,39 @@ struct ProjectTreeNode: View {
 
             // Worktrees (children)
             if isExpanded {
-                if isLoadingWorktrees {
-                    HStack {
-                        Spacer()
-                        ProgressView()
-                            .scaleEffect(0.6)
-                        Spacer()
-                    }
-                    .padding(.vertical, DS.Spacing.sm)
-                } else {
-                    ForEach(sortedWorktrees) { worktree in
-                        WorktreeTreeRow(
-                            worktree: worktree,
-                            repository: repository,
-                            selection: $selection,
-                            statusCell: store.statusStore.cell(forWorktreePath: worktree.path)
-                        )
+                Group {
+                    if isLoadingWorktrees {
+                        loadingView
+                            .transition(.opacity)
+                    } else {
+                        worktreeList
+                            .transition(.opacity)
                     }
                 }
+                .animation(DS.Animation.quick, value: isLoadingWorktrees)
+            }
+        }
+    }
+
+    private var loadingView: some View {
+        HStack {
+            Spacer()
+            ProgressView()
+                .scaleEffect(0.6)
+            Spacer()
+        }
+        .padding(.vertical, DS.Spacing.sm)
+    }
+
+    private var worktreeList: some View {
+        VStack(spacing: 0) {
+            ForEach(sortedWorktrees) { worktree in
+                WorktreeTreeRow(
+                    worktree: worktree,
+                    repository: repository,
+                    selection: $selection,
+                    statusCell: store.statusStore.cell(forWorktreePath: worktree.path)
+                )
             }
         }
     }
@@ -155,4 +170,3 @@ struct ProjectTreeNode: View {
         }
     }
 }
-

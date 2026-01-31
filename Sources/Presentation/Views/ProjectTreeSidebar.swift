@@ -142,8 +142,10 @@ struct ProjectTreeSidebar: View {
         .onChange(of: store.worktrees) { _, worktrees in
             // Sync worktrees cache for selected repository
             if let repo = store.selectedRepository {
-                worktreesCache[repo.id] = worktrees
-                loadingRepositories.remove(repo.id)
+                withAnimation(DS.Animation.quick) {
+                    worktreesCache[repo.id] = worktrees
+                    loadingRepositories.remove(repo.id)
+                }
             }
         }
         .onChange(of: selection) { _, newSelection in
@@ -177,14 +179,22 @@ struct ProjectTreeSidebar: View {
                 // Selected repository: rely on the store's selected worktrees (loaded elsewhere),
                 // and keep a loading placeholder until they arrive.
                 if !store.worktrees.isEmpty {
-                    worktreesCache[repo.id] = store.worktrees
-                    loadingRepositories.remove(repo.id)
+                    await MainActor.run {
+                        withAnimation(DS.Animation.quick) {
+                            worktreesCache[repo.id] = store.worktrees
+                            loadingRepositories.remove(repo.id)
+                        }
+                    }
                 }
             } else {
                 // Load independently without changing selection
                 let loadedWorktrees = await store.loadWorktreesOnly(for: repo)
-                worktreesCache[repo.id] = loadedWorktrees
-                loadingRepositories.remove(repo.id)
+                await MainActor.run {
+                    withAnimation(DS.Animation.quick) {
+                        worktreesCache[repo.id] = loadedWorktrees
+                        loadingRepositories.remove(repo.id)
+                    }
+                }
             }
         }
     }
