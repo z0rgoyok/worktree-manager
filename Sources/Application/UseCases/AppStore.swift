@@ -10,7 +10,6 @@ final class AppStore: ObservableObject {
     @Published var selectedRepository: Repository?
     @Published var selectedWorktree: Worktree?
     @Published var worktrees: [Worktree] = []
-    @Published var worktreeStatuses: [String: WorktreeStatus] = [:]  // path -> status
     @Published var branches: [String] = []
     @Published var worktreeBasePath: String
     @Published var defaultEditorId: String
@@ -28,8 +27,10 @@ final class AppStore: ObservableObject {
     let fileSystemWatcher: FileSystemWatching
     let fileSystem: FileSystemHandling
     let system: SystemOpening
+    let statusStore: WorktreeStatusStore
 
     private let ioQueue = DispatchQueue(label: "worktree-manager.io", qos: .userInitiated)
+    var statusRefreshSuppressionUntilByWorktreePath: [String: Date] = [:]
 
     // MARK: - Initialization
 
@@ -54,6 +55,7 @@ final class AppStore: ObservableObject {
         fileSystemWatcher: FileSystemWatching,
         fileSystem: FileSystemHandling,
         system: SystemOpening,
+        statusStore: WorktreeStatusStore? = nil,
         loadOnInit: Bool = true
     ) {
         self.git = git
@@ -62,6 +64,7 @@ final class AppStore: ObservableObject {
         self.fileSystemWatcher = fileSystemWatcher
         self.fileSystem = fileSystem
         self.system = system
+        self.statusStore = statusStore ?? WorktreeStatusStore()
         self.worktreeBasePath = preferences.worktreeBasePath
         self.defaultEditorId = preferences.defaultEditorId
         self.defaultCopyPatterns = preferences.defaultCopyPatterns
@@ -144,12 +147,62 @@ final class AppStore: ObservableObject {
         }
 
         let gitWorktreesPath = "\(repo.path)/.git/worktrees"
-        let touchesGitWorktrees = changedPaths.contains { $0.hasPrefix(gitWorktreesPath) }
+        let gitWorktreeChanges = changedPaths.filter { $0.hasPrefix(gitWorktreesPath) }
+        let nonGitWorktreeChanges = changedPaths.subtracting(gitWorktreeChanges)
 
-        if touchesGitWorktrees {
-            await refreshWorktrees(for: repo)
-        } else {
-            await refreshAllStatuses()
+        // 1) Changes under `.git/worktrees` are usually status-related (index/refs) and must not force-refresh the whole worktree list.
+        //    We map them to affected worktrees by name and refresh only those statuses.
+        if !gitWorktreeChanges.isEmpty {
+            let names = Set(gitWorktreeChanges.compactMap { Self.extractWorktreeName(fromGitWorktreesPath: $0, gitWorktreesRoot: gitWorktreesPath) })
+            var matched: [Worktree] = []
+            var hasUnknown = false
+
+            for name in names {
+                if let worktree = worktrees.first(where: { $0.name == name }) {
+                    matched.append(worktree)
+                } else {
+                    hasUnknown = true
+                }
+            }
+
+            // If we see a worktree name we don't recognize (created/removed externally), refresh the list once.
+            if hasUnknown || gitWorktreeChanges.contains(gitWorktreesPath) {
+                await refreshWorktrees(for: repo)
+                return
+            }
+
+            let filtered = matched.filter { !shouldSuppressStatusRefresh(forWorktreePath: $0.path) }
+            if !filtered.isEmpty {
+                await refreshStatuses(for: filtered)
+            }
         }
+
+        // 2) Changes outside `.git/worktrees` are mapped by path containment and refresh only affected worktrees.
+        if !nonGitWorktreeChanges.isEmpty {
+            let affected = worktrees.filter { worktree in
+                nonGitWorktreeChanges.contains { changed in
+                    Self.pathTouchesWorktree(changedPath: changed, worktreePath: worktree.path)
+                }
+            }
+            let filtered = affected.filter { !shouldSuppressStatusRefresh(forWorktreePath: $0.path) }
+            if !filtered.isEmpty {
+                await refreshStatuses(for: filtered)
+            }
+        }
+    }
+
+    private static func pathTouchesWorktree(changedPath: String, worktreePath: String) -> Bool {
+        if changedPath == worktreePath { return true }
+        if changedPath.hasPrefix(worktreePath + "/") { return true }
+        if worktreePath.hasPrefix(changedPath + "/") { return true }
+        return false
+    }
+
+    private static func extractWorktreeName(fromGitWorktreesPath path: String, gitWorktreesRoot: String) -> String? {
+        guard path.hasPrefix(gitWorktreesRoot) else { return nil }
+        let suffix = path.dropFirst(gitWorktreesRoot.count)
+        let trimmed = suffix.hasPrefix("/") ? suffix.dropFirst() : suffix[...]
+        guard !trimmed.isEmpty else { return nil }
+        return trimmed.split(separator: "/").first.map(String.init)
     }
 }

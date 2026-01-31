@@ -335,7 +335,7 @@ struct ProjectTreeNode: View {
                             worktree: worktree,
                             repository: repository,
                             selection: $selection,
-                            status: store.getStatus(for: worktree)
+                            statusCell: store.statusStore.cell(forWorktreePath: worktree.path)
                         )
                     }
                 }
@@ -360,7 +360,7 @@ struct WorktreeTreeRow: View {
     let worktree: Worktree
     let repository: Repository
     @Binding var selection: SidebarSelection?
-    let status: WorktreeStatus?
+    @ObservedObject var statusCell: WorktreeStatusCell
 
     @State private var isHovered = false
 
@@ -409,7 +409,7 @@ struct WorktreeTreeRow: View {
                         .lineLimit(1)
 
                     // Status indicators
-                    if let status = status {
+                    if let status = statusCell.value {
                         WorktreeStatusIndicators(status: status)
                     }
                 }
@@ -477,7 +477,7 @@ struct WorktreeTreeRow: View {
 
                 // PR actions
                 Section {
-                    if let status = status, let pr = status.prStatus {
+                    if let status = statusCell.value, let pr = status.prStatus {
                         Button(pr.isMerged ? "View Merged PR" : "View PR #\(pr.number)") {
                             store.openPR(worktree)
                         }

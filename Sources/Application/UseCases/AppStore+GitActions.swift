@@ -50,8 +50,7 @@ extension AppStore {
     }
 
     func openPR(_ worktree: Worktree) {
-        guard let status = worktreeStatuses[worktree.path],
-              let prStatus = status.prStatus,
+        guard let prStatus = getStatus(for: worktree)?.prStatus,
               let url = URL(string: prStatus.url) else {
             return
         }

@@ -77,7 +77,10 @@ struct ContentView: View {
         }
         .sheet(isPresented: $showFinishWorktree) {
             if let worktree = store.selectedWorktree {
-                CompleteWorktreeSheet(worktree: worktree)
+                CompleteWorktreeSheet(
+                    worktree: worktree,
+                    statusCell: store.statusStore.cell(forWorktreePath: worktree.path)
+                )
             }
         }
         .sheet(isPresented: $showHelp) {

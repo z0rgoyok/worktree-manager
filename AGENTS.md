@@ -248,7 +248,10 @@ The code follows a clean-architecture split: keep UI in `Presentation`, business
 
 - Indentation: 4 spaces; follow Swift API Design Guidelines.
 - Types: `UpperCamelCase` (e.g., `GitService`), methods/vars: `lowerCamelCase`.
-- Files: one primary type per file; keep filenames aligned with the type (`Worktree.swift`, `SettingsView.swift`).
+- Files:
+  - Exactly **one top-level type** per Swift file (`struct`/`class`/`enum`/`protocol`).
+  - Prefer **nested types** for tightly-coupled helpers; otherwise extract helpers into separate files.
+  - Keep filenames aligned with the type (`Worktree.swift`, `SettingsView.swift`).
 - Prefer `@MainActor` for UI-facing state (`AppStore`) and keep Git/file operations in `Infrastructure`.
 
 ## Testing Guidelines

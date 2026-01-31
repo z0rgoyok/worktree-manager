@@ -17,7 +17,11 @@ struct KanbanBoard: View {
                 case .repository(let repo):
                     RepositoryDetailHeader(repository: repo)
                 case .worktree(let worktree, let repo):
-                    WorktreeDetailHeader(worktree: worktree, repository: repo)
+                    WorktreeDetailHeader(
+                        worktree: worktree,
+                        repository: repo,
+                        statusCell: store.statusStore.cell(forWorktreePath: worktree.path)
+                    )
                 }
             }
 

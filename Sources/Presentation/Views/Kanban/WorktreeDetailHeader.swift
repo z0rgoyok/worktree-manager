@@ -5,10 +5,7 @@ struct WorktreeDetailHeader: View {
     @EnvironmentObject var store: AppStore
     let worktree: Worktree
     let repository: Repository
-
-    private var status: WorktreeStatus? {
-        store.getStatus(for: worktree)
-    }
+    @ObservedObject var statusCell: WorktreeStatusCell
 
     var body: some View {
         VStack(spacing: 0) {
@@ -62,7 +59,7 @@ struct WorktreeDetailHeader: View {
 
                     // Status row
                     if !worktree.isPrunable {
-                        WorktreeStatusRow(status: status)
+                        WorktreeStatusRow(status: statusCell.value)
                     }
                 }
 
@@ -199,7 +196,10 @@ struct RepositoryDetailHeader: View {
                 isPrunable: false,
                 baseBranch: "main"
             ),
-            repository: Repository(path: "/Users/test/repo")
+            repository: Repository(path: "/Users/test/repo"),
+            statusCell: WorktreeStatusCell(
+                value: WorktreeStatus(isDirty: false, hasRemote: true, ahead: 1, behind: 0, prStatus: nil)
+            )
         )
         .environmentObject(AppStore.makeDefault(loadOnInit: false))
 

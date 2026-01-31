@@ -44,7 +44,10 @@ struct WorktreeList: View {
                 ScrollView {
                     LazyVStack(spacing: 12) {
                         ForEach(store.worktrees) { worktree in
-                            WorktreeCard(worktree: worktree)
+                            WorktreeCard(
+                                worktree: worktree,
+                                statusCell: store.statusStore.cell(forWorktreePath: worktree.path)
+                            )
                         }
                     }
                     .padding()
@@ -60,6 +63,7 @@ struct WorktreeList: View {
 struct WorktreeCard: View {
     @EnvironmentObject var store: AppStore
     let worktree: Worktree
+    @ObservedObject var statusCell: WorktreeStatusCell
 
     @State private var showEditorPicker = false
     @State private var showCreatePR = false
@@ -67,7 +71,7 @@ struct WorktreeCard: View {
     @State private var showDeleteSheet = false
 
     private var status: WorktreeStatus? {
-        store.getStatus(for: worktree)
+        statusCell.value
     }
 
     var body: some View {
@@ -159,7 +163,10 @@ struct WorktreeCard: View {
             CreatePRSheet(worktree: worktree)
         }
         .sheet(isPresented: $showFinishSheet) {
-            FinishWorktreeSheet(worktree: worktree)
+            FinishWorktreeSheet(
+                worktree: worktree,
+                statusCell: statusCell
+            )
         }
         .sheet(isPresented: $showDeleteSheet) {
             DeleteWorktreeSheet(worktree: worktree)
@@ -421,6 +428,7 @@ struct CompleteWorktreeSheet: View {
     @EnvironmentObject var store: AppStore
     @Environment(\.dismiss) var dismiss
     let worktree: Worktree
+    @ObservedObject var statusCell: WorktreeStatusCell
 
     @State private var selectedAction: CompleteAction = .prMerged
     @State private var deleteLocalBranch = true
@@ -430,7 +438,7 @@ struct CompleteWorktreeSheet: View {
     @State private var hasRemoteBranch = false
 
     private var status: WorktreeStatus? {
-        store.getStatus(for: worktree)
+        statusCell.value
     }
 
     private var hasMergedPR: Bool {
@@ -621,11 +629,11 @@ struct CompleteWorktreeSheet: View {
     }
 }
 
-// Keep for backward compatibility if needed elsewhere
 struct FinishWorktreeSheet: View {
     let worktree: Worktree
+    @ObservedObject var statusCell: WorktreeStatusCell
     var body: some View {
-        CompleteWorktreeSheet(worktree: worktree)
+        CompleteWorktreeSheet(worktree: worktree, statusCell: statusCell)
     }
 }
 

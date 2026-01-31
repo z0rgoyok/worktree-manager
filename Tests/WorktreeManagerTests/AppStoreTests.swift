@@ -354,13 +354,13 @@ final class AppStoreTests: XCTestCase {
         )
 
         let worktree = Worktree(path: "/wt/feature", branch: "feature")
-        store.worktreeStatuses[worktree.path] = WorktreeStatus(
+        store.statusStore.set(WorktreeStatus(
             isDirty: false,
             hasRemote: true,
             ahead: 0,
             behind: 0,
             prStatus: PRStatus(number: 1, state: "OPEN", url: "https://example.test/pr/1", title: nil)
-        )
+        ), forWorktreePath: worktree.path)
 
         store.openPR(worktree)
 
@@ -419,4 +419,3 @@ final class AppStoreTests: XCTestCase {
         XCTAssertEqual(watcher.updatedPathSets.last, Set(["/new-worktrees"]))
     }
 }
-
