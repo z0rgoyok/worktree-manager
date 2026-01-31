@@ -4,25 +4,27 @@ struct OpenEditorMenu: View {
     @ObservedObject var workspace: WorkspaceComponent
     let worktree: Worktree
 
-    private var preferredEditor: Editor? {
-        workspace.preferredEditor(for: worktree)
+    private var selectedEditorId: String {
+        workspace.preferredEditor(for: worktree)?.id ?? ""
     }
 
     var body: some View {
         Menu {
-            ForEach(workspace.configuredEditors()) { editor in
-                Button {
-                    workspace.openInEditorAndRemember(worktree, editor: editor)
-                } label: {
-                    HStack {
-                        Text(editor.name)
-                        if workspace.rememberEditorChoice && preferredEditor?.id == editor.id {
-                            Spacer()
-                            Image(systemName: "checkmark")
-                        }
+            Picker("", selection: Binding(
+                get: { selectedEditorId },
+                set: { newId in
+                    if let editor = workspace.configuredEditors().first(where: { $0.id == newId }) {
+                        workspace.openInEditorAndRemember(worktree, editor: editor)
                     }
                 }
+            )) {
+                ForEach(workspace.configuredEditors()) { editor in
+                    Text(editor.name).tag(editor.id)
+                }
             }
+            .pickerStyle(.inline)
+            .labelsHidden()
+
             Divider()
             Button(workspace.rememberEditorChoice ? "Forget Editor Choice" : "Remember Editor Choice") {
                 workspace.rememberEditorChoice.toggle()

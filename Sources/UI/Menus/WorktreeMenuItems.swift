@@ -88,6 +88,10 @@ struct WorktreeMenuItems: View {
             self.statusCell = workspace.statusCell(for: worktree.path)
         }
 
+        private var selectedEditorId: String {
+            workspace.preferredEditor(for: worktree)?.id ?? ""
+        }
+
         var body: some View {
             Section {
                 Button("Open in Editor") {
@@ -96,34 +100,27 @@ struct WorktreeMenuItems: View {
                 .keyboardShortcut("o", modifiers: .command)
 
                 Menu("Open in...") {
-                    ForEach(workspace.configuredEditors()) { editor in
-                        editorButton(editor)
+                    Picker("", selection: Binding(
+                        get: { selectedEditorId },
+                        set: { newId in
+                            if let editor = workspace.configuredEditors().first(where: { $0.id == newId }) {
+                                workspace.openInEditorAndRemember(worktree, editor: editor)
+                            }
+                        }
+                    )) {
+                        ForEach(workspace.configuredEditors()) { editor in
+                            Text(editor.name).tag(editor.id)
+                        }
                     }
+                    .pickerStyle(.inline)
+                    .labelsHidden()
+
                     Divider()
                     Button(workspace.rememberEditorChoice ? "Forget Editor Choice" : "Remember Editor Choice") {
                         workspace.rememberEditorChoice.toggle()
                         if !workspace.rememberEditorChoice {
                             workspace.clearPreferredEditor(for: worktree)
                         }
-                    }
-                }
-            }
-        }
-
-        private var preferredEditor: Editor? {
-            workspace.preferredEditor(for: worktree)
-        }
-
-        @ViewBuilder
-        private func editorButton(_ editor: Editor) -> some View {
-            Button {
-                workspace.openInEditorAndRemember(worktree, editor: editor)
-            } label: {
-                HStack {
-                    Text(editor.name)
-                    if workspace.rememberEditorChoice && preferredEditor?.id == editor.id {
-                        Spacer()
-                        Image(systemName: "checkmark")
                     }
                 }
             }
