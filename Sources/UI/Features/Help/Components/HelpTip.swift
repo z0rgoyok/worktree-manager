@@ -4,17 +4,24 @@ struct HelpTip: View {
     let text: String
 
     var body: some View {
-        HStack(alignment: .top, spacing: 8) {
+        HStack(alignment: .top, spacing: DS.Spacing.sm) {
             Image(systemName: "lightbulb.fill")
-                .foregroundStyle(.yellow)
                 .font(.caption)
+                .foregroundStyle(.yellow)
+
             Text(text)
                 .font(.callout)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(DS.Colors.textSecondary)
         }
-        .padding(10)
-        .background(Color.yellow.opacity(0.1))
-        .cornerRadius(8)
+        .padding(DS.Spacing.md)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: DS.Radius.md)
+                .fill(Color.yellow.opacity(0.08))
+                .overlay(
+                    RoundedRectangle(cornerRadius: DS.Radius.md)
+                        .stroke(Color.yellow.opacity(0.2), lineWidth: 1)
+                )
+        )
     }
 }
-

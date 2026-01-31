@@ -6,21 +6,20 @@ struct BadgeExplanation: View {
     let description: String
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
+        HStack(alignment: .center, spacing: DS.Spacing.md) {
             Text(text)
                 .font(.caption2)
-                .fontWeight(.medium)
-                .padding(.horizontal, 6)
-                .padding(.vertical, 2)
-                .background(color.opacity(0.2))
+                .fontWeight(.semibold)
+                .padding(.horizontal, DS.Spacing.sm)
+                .padding(.vertical, DS.Spacing.xxs)
+                .background(color.opacity(0.15))
                 .foregroundStyle(color)
-                .cornerRadius(4)
+                .cornerRadius(DS.Radius.xs)
                 .frame(width: 70, alignment: .leading)
 
             Text(description)
                 .font(.callout)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(DS.Colors.textSecondary)
         }
     }
 }
-
