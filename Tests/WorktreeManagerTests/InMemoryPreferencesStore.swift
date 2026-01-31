@@ -4,24 +4,26 @@ import Foundation
 final class InMemoryPreferencesStore: PreferencesStore {
     var repositories: [Repository]
     var worktreeBasePath: String
-    var defaultEditorId: String
     var expandedRepositoryIds: Set<UUID> = []
+    var lastSelectedRepositoryId: UUID?
+    var lastSelectedWorktreePath: String?
     var defaultCopyPatterns: [CopyPattern] = []
+    var rememberEditorChoice: Bool = false
+    var enabledEditorIds: Set<String>? = nil
     private var preferredBaseBranches: [UUID: String] = [:]
     private var worktreeBaseBranches: [String: String] = [:]
     private var repoCopyPatterns: [UUID: [CopyPattern]] = [:]
+    private var preferredEditorIdsByRepositoryId: [UUID: String] = [:]
 
     private(set) var saveRepositoriesCalls: [[Repository]] = []
 
     init(
         repositories: [Repository] = [],
         worktreeBasePath: String = "/worktrees",
-        defaultEditorId: String = "",
         defaultCopyPatterns: [CopyPattern] = []
     ) {
         self.repositories = repositories
         self.worktreeBasePath = worktreeBasePath
-        self.defaultEditorId = defaultEditorId
         self.defaultCopyPatterns = defaultCopyPatterns
     }
 
@@ -68,5 +70,36 @@ final class InMemoryPreferencesStore: PreferencesStore {
 
     func effectiveCopyPatterns(forRepositoryId id: UUID) -> [CopyPattern] {
         repoCopyPatterns[id] ?? defaultCopyPatterns
+    }
+
+    // MARK: - Preferred Editor (per repository)
+
+    func preferredEditorId(forRepositoryId id: UUID) -> String? {
+        preferredEditorIdsByRepositoryId[id]
+    }
+
+    func setPreferredEditorId(_ editorId: String, forRepositoryId id: UUID) {
+        preferredEditorIdsByRepositoryId[id] = editorId
+    }
+
+    func removePreferredEditorId(forRepositoryId id: UUID) {
+        preferredEditorIdsByRepositoryId.removeValue(forKey: id)
+    }
+
+    // MARK: - Enabled Editors
+
+    func isEditorEnabled(_ editorId: String) -> Bool {
+        guard let enabledEditorIds else { return true }
+        return enabledEditorIds.contains(editorId)
+    }
+
+    func setEditorEnabled(_ editorId: String, enabled: Bool, allEditorIds: [String]) {
+        var current = enabledEditorIds ?? Set(allEditorIds)
+        if enabled {
+            current.insert(editorId)
+        } else {
+            current.remove(editorId)
+        }
+        self.enabledEditorIds = current
     }
 }

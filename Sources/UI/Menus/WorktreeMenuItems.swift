@@ -122,6 +122,9 @@ struct WorktreeMenuItems: View {
                             workspace.clearPreferredEditor()
                         }
                     }
+                    Button("Configure Editors...") {
+                        root.send(.presentSheet(.configureEditors))
+                    }
                 }
             }
 

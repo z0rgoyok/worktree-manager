@@ -7,8 +7,16 @@ final class AppStore: ObservableObject {
     // MARK: - Published State
 
     @Published var repositories: [Repository] = []
-    @Published var selectedRepository: Repository?
-    @Published var selectedWorktree: Worktree?
+    @Published var selectedRepository: Repository? = nil {
+        didSet {
+            persistLastSelection()
+        }
+    }
+    @Published var selectedWorktree: Worktree? = nil {
+        didSet {
+            persistLastSelection()
+        }
+    }
     @Published var worktrees: [Worktree] = []
     @Published var branches: [String] = []
     @Published var worktreeBasePath: String
@@ -28,6 +36,11 @@ final class AppStore: ObservableObject {
 
     private let ioQueue = DispatchQueue(label: "worktree-manager.io", qos: .userInitiated)
     var statusRefreshSuppressionUntilByWorktreePath: [String: Date] = [:]
+
+    private struct LastSelectionSnapshot: Equatable {
+        let repositoryId: UUID?
+        let worktreePath: String?
+    }
 
     // MARK: - Initialization
 
@@ -68,13 +81,16 @@ final class AppStore: ObservableObject {
         self.defaultCopyPatterns = preferences.defaultCopyPatterns
 
         if loadOnInit {
+            let snapshot = LastSelectionSnapshot(
+                repositoryId: preferences.lastSelectedRepositoryId,
+                worktreePath: preferences.lastSelectedWorktreePath
+            )
+
             setupFileSystemWatcher()
 
             // Bootstrap repositories synchronously to avoid a transient empty UI state on app launch.
             repositories = preferences.loadRepositories()
-            if selectedRepository == nil {
-                selectedRepository = repositories.first
-            }
+            selectedRepository = restoredRepository(from: snapshot, repositories: repositories)
             updateWatchedPaths()
 
             // Kick off initial data loading without blocking init.
@@ -84,6 +100,7 @@ final class AppStore: ObservableObject {
                 defer { self.activityCenter.end(token) }
                 try? await refreshWorktrees()
                 await loadBranches()
+                restoreSelectedWorktree(from: snapshot)
             }
         }
     }
@@ -205,5 +222,29 @@ final class AppStore: ObservableObject {
         let trimmed = suffix.hasPrefix("/") ? suffix.dropFirst() : suffix[...]
         guard !trimmed.isEmpty else { return nil }
         return trimmed.split(separator: "/").first.map(String.init)
+    }
+
+    private func persistLastSelection() {
+        preferences.lastSelectedRepositoryId = selectedRepository?.id
+        preferences.lastSelectedWorktreePath = selectedWorktree?.path
+    }
+
+    private func restoredRepository(from snapshot: LastSelectionSnapshot, repositories: [Repository]) -> Repository? {
+        if let id = snapshot.repositoryId, let repo = repositories.first(where: { $0.id == id }) {
+            return repo
+        }
+        return repositories.first
+    }
+
+    private func restoreSelectedWorktree(from snapshot: LastSelectionSnapshot) {
+        guard let repo = selectedRepository else { return }
+        guard snapshot.repositoryId == repo.id else { return }
+        guard let path = snapshot.worktreePath else { return }
+
+        if let worktree = worktrees.first(where: { $0.path == path }) {
+            selectedWorktree = worktree
+        } else {
+            selectedWorktree = nil
+        }
     }
 }

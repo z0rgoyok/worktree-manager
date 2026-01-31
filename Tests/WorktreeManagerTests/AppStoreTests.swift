@@ -3,6 +3,72 @@ import XCTest
 
 final class AppStoreTests: XCTestCase {
     @MainActor
+    func test_loadRepositories_restoresLastSelectedRepositoryAndWorktree_whenStillPresent() async throws {
+        let repo1 = Repository(id: UUID(uuidString: "11111111-1111-1111-1111-111111111111")!, path: "/repo-1")
+        let repo2 = Repository(id: UUID(uuidString: "22222222-2222-2222-2222-222222222222")!, path: "/repo-2")
+
+        let preferences = InMemoryPreferencesStore(repositories: [repo1, repo2], worktreeBasePath: "/worktrees")
+        preferences.lastSelectedRepositoryId = repo2.id
+        preferences.lastSelectedWorktreePath = "/worktrees/repo-2/feature-1"
+
+        let git = FakeGitClient()
+        git.listWorktreesHandler = { repoPath in
+            if repoPath == "/repo-1" { return [Worktree(path: "/repo-1", branch: "main", isMain: true)] }
+            if repoPath == "/repo-2" { return [Worktree(path: "/worktrees/repo-2/feature-1", branch: "feature-1")] }
+            XCTFail("Unexpected repo path: \(repoPath)")
+            return []
+        }
+        git.listBranchesHandler = { _ in [] }
+
+        let store = AppStore(
+            git: git,
+            preferences: preferences,
+            editorOpener: SpyEditorOpener(),
+            fileSystemWatcher: SpyFileSystemWatcher(),
+            fileSystem: FakeFileSystem(existingPaths: ["/worktrees"]),
+            system: SpySystemOpener(),
+            loadOnInit: false
+        )
+
+        try await store.loadRepositories()
+
+        XCTAssertEqual(store.selectedRepository, repo2)
+        XCTAssertEqual(store.selectedWorktree?.path, "/worktrees/repo-2/feature-1")
+        XCTAssertEqual(preferences.lastSelectedRepositoryId, repo2.id)
+        XCTAssertEqual(preferences.lastSelectedWorktreePath, "/worktrees/repo-2/feature-1")
+    }
+
+    @MainActor
+    func test_loadRepositories_clearsLastSelectedWorktree_whenMissing() async throws {
+        let repo = Repository(id: UUID(uuidString: "33333333-3333-3333-3333-333333333333")!, path: "/repo")
+
+        let preferences = InMemoryPreferencesStore(repositories: [repo], worktreeBasePath: "/worktrees")
+        preferences.lastSelectedRepositoryId = repo.id
+        preferences.lastSelectedWorktreePath = "/worktrees/repo/missing"
+
+        let git = FakeGitClient()
+        git.listWorktreesHandler = { _ in [Worktree(path: "/repo", branch: "main", isMain: true)] }
+        git.listBranchesHandler = { _ in [] }
+
+        let store = AppStore(
+            git: git,
+            preferences: preferences,
+            editorOpener: SpyEditorOpener(),
+            fileSystemWatcher: SpyFileSystemWatcher(),
+            fileSystem: FakeFileSystem(existingPaths: ["/worktrees"]),
+            system: SpySystemOpener(),
+            loadOnInit: false
+        )
+
+        try await store.loadRepositories()
+
+        XCTAssertEqual(store.selectedRepository, repo)
+        XCTAssertNil(store.selectedWorktree)
+        XCTAssertEqual(preferences.lastSelectedRepositoryId, repo.id)
+        XCTAssertNil(preferences.lastSelectedWorktreePath)
+    }
+
+    @MainActor
     func test_loadRepositories_autoSelectsFirst_andLoadsBranchesAndWorktrees() async throws {
         let repo = Repository(path: "/repo")
         let preferences = InMemoryPreferencesStore(
@@ -403,7 +469,7 @@ final class AppStoreTests: XCTestCase {
 
     @MainActor
     func test_settings_writeThroughToPreferences() {
-        let preferences = InMemoryPreferencesStore(worktreeBasePath: "/worktrees", defaultEditorId: "")
+        let preferences = InMemoryPreferencesStore(worktreeBasePath: "/worktrees")
         let fileSystem = FakeFileSystem(existingPaths: ["/new-worktrees"])
         let watcher = SpyFileSystemWatcher()
 
@@ -418,12 +484,12 @@ final class AppStoreTests: XCTestCase {
         )
 
         store.setWorktreeBasePath("/new-worktrees")
-        store.setDefaultEditorId("vscode")
+        store.rememberEditorChoice = true
 
         XCTAssertEqual(preferences.worktreeBasePath, "/new-worktrees")
-        XCTAssertEqual(preferences.defaultEditorId, "vscode")
         XCTAssertEqual(store.worktreeBasePath, "/new-worktrees")
-        XCTAssertEqual(store.defaultEditorId, "vscode")
+        XCTAssertEqual(preferences.rememberEditorChoice, true)
+        XCTAssertEqual(store.rememberEditorChoice, true)
         XCTAssertEqual(watcher.updatedPathSets.last, Set(["/new-worktrees"]))
     }
 }

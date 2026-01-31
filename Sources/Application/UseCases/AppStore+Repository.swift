@@ -4,10 +4,25 @@ import Foundation
 
 extension AppStore {
     func loadRepositories() async throws {
+        let snapshotLastSelectedRepositoryId = preferences.lastSelectedRepositoryId
+        let snapshotLastSelectedWorktreePath = preferences.lastSelectedWorktreePath
+
         repositories = preferences.loadRepositories()
-        // Auto-select first repository
-        if selectedRepository == nil, let first = repositories.first {
+        guard selectedRepository == nil else { return }
+
+        if let lastId = snapshotLastSelectedRepositoryId,
+           let repo = repositories.first(where: { $0.id == lastId }) {
+            try await selectRepository(repo)
+        } else if let first = repositories.first {
             try await selectRepository(first)
+        }
+
+        // Restore last selected worktree (if still present) after worktrees are loaded.
+        if let repo = selectedRepository,
+           snapshotLastSelectedRepositoryId == repo.id,
+           let path = snapshotLastSelectedWorktreePath,
+           let worktree = worktrees.first(where: { $0.path == path }) {
+            selectedWorktree = worktree
         }
     }
 
@@ -43,6 +58,7 @@ extension AppStore {
 
     func selectRepository(_ repo: Repository) async throws {
         selectedRepository = repo
+        selectedWorktree = nil
         try await refreshWorktrees(for: repo)
         await loadBranches(for: repo)
     }

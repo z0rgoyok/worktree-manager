@@ -176,6 +176,23 @@ final class WorkspaceComponent: ObservableObject {
         store.configuredEditors
     }
 
+    func allEditors() -> [Editor] {
+        store.allEditors
+    }
+
+    func isEditorInstalled(_ editor: Editor) -> Bool {
+        store.isEditorInstalled(editor)
+    }
+
+    func isEditorEnabled(_ editor: Editor) -> Bool {
+        store.isEditorEnabled(editor)
+    }
+
+    func setEditorEnabled(_ editor: Editor, enabled: Bool) {
+        objectWillChange.send()
+        store.setEditorEnabled(editor, enabled: enabled)
+    }
+
     var rememberEditorChoice: Bool {
         get { store.rememberEditorChoice }
         set {
@@ -309,11 +326,19 @@ final class WorkspaceComponent: ObservableObject {
             .store(in: &cancellables)
 
         store.$selectedRepository
-            .sink { [weak self] in self?.state.selectedRepository = $0 }
+            .sink { [weak self] repo in
+                guard let self else { return }
+                self.state.selectedRepository = repo
+                self.syncSidebarSelectionWithStore()
+            }
             .store(in: &cancellables)
 
         store.$selectedWorktree
-            .sink { [weak self] in self?.state.selectedWorktree = $0 }
+            .sink { [weak self] worktree in
+                guard let self else { return }
+                self.state.selectedWorktree = worktree
+                self.syncSidebarSelectionWithStore()
+            }
             .store(in: &cancellables)
 
         store.$worktrees
@@ -328,10 +353,7 @@ final class WorkspaceComponent: ObservableObject {
             .sink { [weak self] in self?.state.worktreeBasePath = $0 }
             .store(in: &cancellables)
 
-        // Mirror initial selection to UI selection.
-        if let repo = store.selectedRepository {
-            state.sidebarSelection = .repository(repo)
-        }
+        syncSidebarSelectionWithStore()
     }
 
     private func applySidebarSelection(_ selection: SidebarSelection?) async {
@@ -355,6 +377,18 @@ final class WorkspaceComponent: ObservableObject {
             store.selectedWorktree = wt
         } else {
             store.selectedWorktree = nil
+        }
+    }
+
+    private func syncSidebarSelectionWithStore() {
+        if let repo = store.selectedRepository {
+            if let worktree = store.selectedWorktree {
+                state.sidebarSelection = .worktree(worktree, inRepository: repo)
+            } else {
+                state.sidebarSelection = .repository(repo)
+            }
+        } else {
+            state.sidebarSelection = nil
         }
     }
 }

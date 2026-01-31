@@ -3,9 +3,27 @@ import Foundation
 // MARK: - Editor Use Cases
 
 extension AppStore {
-    /// Editors configured in preferences
+    /// Editors enabled by user (filtered from all available)
     var configuredEditors: [Editor] {
-        editorOpener.availableEditors()
+        editorOpener.allEditors().filter { preferences.isEditorEnabled($0.id) }
+    }
+
+    /// All editors (for configuration UI)
+    var allEditors: [Editor] {
+        editorOpener.allEditors()
+    }
+
+    func isEditorInstalled(_ editor: Editor) -> Bool {
+        editorOpener.isInstalled(editor)
+    }
+
+    func isEditorEnabled(_ editor: Editor) -> Bool {
+        preferences.isEditorEnabled(editor.id)
+    }
+
+    func setEditorEnabled(_ editor: Editor, enabled: Bool) {
+        let allIds = allEditors.map(\.id)
+        preferences.setEditorEnabled(editor.id, enabled: enabled, allEditorIds: allIds)
     }
 
     func openInEditor(_ worktree: Worktree, editor: Editor) throws {
@@ -21,7 +39,7 @@ extension AppStore {
     }
 
     func availableEditors() -> [Editor] {
-        editorOpener.availableEditors()
+        configuredEditors
     }
 
     // MARK: - Remember Editor Choice (per repository)

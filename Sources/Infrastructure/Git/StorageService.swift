@@ -10,8 +10,11 @@ final class StorageService {
     private let preferredBaseBranchesKey = "preferredBaseBranches"
     private let worktreeBaseBranchesKey = "worktreeBaseBranches"
     private let expandedRepositoriesKey = "expandedRepositories"
+    private let lastSelectedRepositoryIdKey = "lastSelectedRepositoryId"
+    private let lastSelectedWorktreePathKey = "lastSelectedWorktreePath"
     private let rememberEditorChoiceKey = "rememberEditorChoice"
     private let repositoryPreferredEditorsKey = "repositoryPreferredEditors"
+    private let enabledEditorIdsKey = "enabledEditorIds"
 
     private init() {}
 
@@ -54,6 +57,42 @@ final class StorageService {
         defaults.set(dict, forKey: repositoryPreferredEditorsKey)
     }
 
+    // MARK: - Enabled Editors
+
+    /// Returns nil if never configured (means all enabled), or the set of enabled IDs
+    var enabledEditorIds: Set<String>? {
+        get {
+            guard let array = defaults.array(forKey: enabledEditorIdsKey) as? [String] else {
+                return nil
+            }
+            return Set(array)
+        }
+        set {
+            if let ids = newValue {
+                defaults.set(Array(ids).sorted(), forKey: enabledEditorIdsKey)
+            } else {
+                defaults.removeObject(forKey: enabledEditorIdsKey)
+            }
+        }
+    }
+
+    func isEditorEnabled(_ editorId: String) -> Bool {
+        guard let enabled = enabledEditorIds else {
+            return true // All enabled by default
+        }
+        return enabled.contains(editorId)
+    }
+
+    func setEditorEnabled(_ editorId: String, enabled: Bool, allEditorIds: [String]) {
+        var current = enabledEditorIds ?? Set(allEditorIds)
+        if enabled {
+            current.insert(editorId)
+        } else {
+            current.remove(editorId)
+        }
+        enabledEditorIds = current
+    }
+
     // MARK: - Worktree Base Path
 
     var worktreeBasePath: String {
@@ -81,6 +120,33 @@ final class StorageService {
         set {
             let strings = newValue.map(\.uuidString).sorted()
             defaults.set(strings, forKey: expandedRepositoriesKey)
+        }
+    }
+
+    // MARK: - Sidebar Selection (UI)
+
+    var lastSelectedRepositoryId: UUID? {
+        get {
+            guard let value = defaults.string(forKey: lastSelectedRepositoryIdKey) else { return nil }
+            return UUID(uuidString: value)
+        }
+        set {
+            if let id = newValue {
+                defaults.set(id.uuidString, forKey: lastSelectedRepositoryIdKey)
+            } else {
+                defaults.removeObject(forKey: lastSelectedRepositoryIdKey)
+            }
+        }
+    }
+
+    var lastSelectedWorktreePath: String? {
+        get { defaults.string(forKey: lastSelectedWorktreePathKey) }
+        set {
+            if let path = newValue, !path.isEmpty {
+                defaults.set(path, forKey: lastSelectedWorktreePathKey)
+            } else {
+                defaults.removeObject(forKey: lastSelectedWorktreePathKey)
+            }
         }
     }
 

@@ -5,7 +5,6 @@ struct ContentView: View {
     @EnvironmentObject var root: RootComponent
     @EnvironmentObject var workspace: WorkspaceComponent
     @EnvironmentObject var activityCenter: ActivityCenter
-    @State private var sidebarSelection: SidebarSelection?
     @State private var alert: AlertState?
 
     var body: some View {
@@ -18,17 +17,6 @@ struct ContentView: View {
                 Button("OK") { alert = nil }
             } message: {
                 Text(alert?.message ?? "")
-            }
-            .onChange(of: sidebarSelection) { _, newSelection in
-                workspace.send(.setSidebarSelection(newSelection), root: root)
-            }
-            .onAppear {
-                if sidebarSelection == nil {
-                    sidebarSelection = workspace.state.sidebarSelection
-                }
-                if sidebarSelection == nil, let repo = workspace.state.selectedRepository {
-                    sidebarSelection = .repository(repo)
-                }
             }
             .task {
                 for await effect in root.effects {
@@ -45,7 +33,7 @@ struct ContentView: View {
 
     private var splitView: some View {
         NavigationSplitView {
-            ProjectTreeSidebar(selection: $sidebarSelection)
+            ProjectTreeSidebar(selection: sidebarSelectionBinding)
                 .frame(minWidth: DS.Sizes.sidebarMinWidth)
                 .navigationSplitViewColumnWidth(
                     min: DS.Sizes.sidebarMinWidth,
@@ -53,7 +41,7 @@ struct ContentView: View {
                     max: DS.Sizes.sidebarMaxWidth
                 )
         } detail: {
-            KanbanBoard(selection: sidebarSelection)
+            KanbanBoard(selection: workspace.state.sidebarSelection)
                 .frame(minWidth: 600)
         }
     }
@@ -70,7 +58,7 @@ struct ContentView: View {
                 .help("New Worktree... (⌘N)")
 
                 if let selectedWorktree = workspace.state.selectedWorktree {
-                    OpenEditorMenu(workspace: workspace, worktree: selectedWorktree)
+                    OpenEditorMenu(root: root, workspace: workspace, worktree: selectedWorktree)
                         .help("Open in Editor (⌘O)")
 
                     Button {
@@ -119,6 +107,15 @@ struct ContentView: View {
             return repo.name
         }
         return "Worktree Manager"
+    }
+
+    private var sidebarSelectionBinding: Binding<SidebarSelection?> {
+        Binding(
+            get: { workspace.state.sidebarSelection },
+            set: { newSelection in
+                workspace.send(.setSidebarSelection(newSelection), root: root)
+            }
+        )
     }
 
     private var sheetBinding: Binding<RootComponent.Sheet?> {
@@ -195,6 +192,8 @@ struct ContentView: View {
                     }
                     .padding()
                 }
+            case .configureEditors:
+                ConfigureEditorsSheet()
             case .help:
                 HelpView()
             }

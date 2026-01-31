@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct OpenEditorMenu: View {
+    @ObservedObject var root: RootComponent
     @ObservedObject var workspace: WorkspaceComponent
     let worktree: Worktree
 
@@ -61,6 +62,9 @@ struct OpenEditorMenu: View {
             if !workspace.rememberEditorChoice {
                 workspace.clearPreferredEditor()
             }
+        }
+        Button("Configure Editors...") {
+            root.send(.presentSheet(.configureEditors))
         }
     }
 }

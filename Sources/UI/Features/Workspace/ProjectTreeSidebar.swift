@@ -6,7 +6,7 @@ struct ProjectTreeSidebar: View {
     @EnvironmentObject var workspace: WorkspaceComponent
     @Binding var selection: SidebarSelection?
     @State private var expandedRepositories: Set<UUID> = []
-    @State private var didRestoreExpandedRepositories = false
+    @State private var pendingExpandedRepositoryIds: Set<UUID> = []
     @State private var repositoryForCopySettings: Repository?
     @State private var worktreesCache: [UUID: [Worktree]] = [:]  // repo.id -> worktrees
     @State private var loadingRepositories: Set<UUID> = []
@@ -20,6 +20,9 @@ struct ProjectTreeSidebar: View {
                 RepositoryCopyPatternsSheet(repository: repo)
             }
             .onAppear {
+                if pendingExpandedRepositoryIds.isEmpty {
+                    pendingExpandedRepositoryIds = workspace.loadExpandedRepositoryIds()
+                }
                 restoreExpandedRepositoriesIfNeeded()
                 initializeSelection()
             }
@@ -28,7 +31,11 @@ struct ProjectTreeSidebar: View {
             }
             .onChange(of: workspace.state.repositories) { _, repos in
                 // Drop expansion state for repositories that no longer exist.
-                expandedRepositories = expandedRepositories.intersection(Set(repos.map(\.id)))
+                let repoIds = Set(repos.map(\.id))
+                let filtered = expandedRepositories.intersection(repoIds)
+                if filtered != expandedRepositories {
+                    expandedRepositories = filtered
+                }
                 restoreExpandedRepositoriesIfNeeded()
 
                 if selection == nil, let repo = workspace.state.selectedRepository {
@@ -54,6 +61,7 @@ struct ProjectTreeSidebar: View {
                 // Auto-expand only when selecting a worktree (so the selection is visible).
                 if let sel = newSelection, SidebarAutoExpansionPolicy.shouldAutoExpandRepository(for: newSelection) {
                     expandedRepositories.insert(sel.repository.id)
+                    pendingExpandedRepositoryIds.remove(sel.repository.id)
                     if worktreesCache[sel.repository.id] == nil {
                         loadWorktrees(for: sel.repository)
                     }
@@ -235,14 +243,29 @@ struct ProjectTreeSidebar: View {
 
     private func restoreExpandedRepositories() {
         let repoIds = Set(workspace.state.repositories.map(\.id))
-        expandedRepositories = workspace.loadExpandedRepositoryIds().intersection(repoIds)
+        let available = pendingExpandedRepositoryIds.intersection(repoIds)
+        if !available.isEmpty {
+            expandedRepositories.formUnion(available)
+            pendingExpandedRepositoryIds.subtract(available)
+        }
+
+        ensureWorktreesLoadedForExpandedRepositories()
     }
 
     private func restoreExpandedRepositoriesIfNeeded() {
-        guard !didRestoreExpandedRepositories else { return }
         guard !workspace.state.repositories.isEmpty else { return }
         restoreExpandedRepositories()
-        didRestoreExpandedRepositories = true
+    }
+
+    private func ensureWorktreesLoadedForExpandedRepositories() {
+        let expandedIds = expandedRepositories
+
+        for id in expandedIds {
+            guard worktreesCache[id] == nil else { continue }
+            guard !loadingRepositories.contains(id) else { continue }
+            guard let repo = workspace.state.repositories.first(where: { $0.id == id }) else { continue }
+            loadWorktrees(for: repo)
+        }
     }
 }
 

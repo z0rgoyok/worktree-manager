@@ -44,8 +44,8 @@ final class EditorService {
         }
     }
 
-    /// Check if an editor is available
-    func isAvailable(editor: Editor) -> Bool {
+    /// Check if an editor is installed on the system
+    func isInstalled(_ editor: Editor) -> Bool {
         if editor.id == "finder" || editor.id == "terminal" {
             return true
         }
@@ -98,6 +98,10 @@ final class EditorService {
     }
 
     func availableEditors() -> [Editor] {
+        Editor.builtIn
+    }
+
+    func allEditors() -> [Editor] {
         Editor.builtIn
     }
 }
