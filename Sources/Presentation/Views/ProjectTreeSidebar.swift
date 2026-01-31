@@ -102,6 +102,16 @@ struct ProjectTreeSidebar: View {
         }
         .frame(minWidth: DS.Sizes.sidebarMinWidth)
         .background(DS.Colors.surfacePrimary)
+        .toolbar {
+            ToolbarItem(placement: .automatic) {
+                Button {
+                    NotificationCenter.default.post(name: .showHelp, object: nil)
+                } label: {
+                    Label("Help", systemImage: "questionmark.circle")
+                }
+                .help("Show help")
+            }
+        }
         .sheet(isPresented: $showAddRepo) {
             AddRepositorySheet()
         }

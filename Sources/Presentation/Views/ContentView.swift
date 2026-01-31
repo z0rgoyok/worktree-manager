@@ -27,7 +27,6 @@ struct ContentView: View {
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
                 if store.selectedRepository != nil {
-                    // New Worktree
                     Button {
                         showAddWorktree = true
                     } label: {
@@ -35,7 +34,6 @@ struct ContentView: View {
                     }
                     .help("New Worktree... (⌘N)")
 
-                    // Open actions
                     if store.selectedWorktree != nil {
                         Button {
                             if let wt = store.selectedWorktree {
@@ -56,7 +54,6 @@ struct ContentView: View {
                         .help("Open in Terminal (⇧⌘T)")
                     }
 
-                    // Refresh
                     Button {
                         Task { await store.refreshWorktrees() }
                     } label: {
@@ -64,15 +61,6 @@ struct ContentView: View {
                     }
                     .help("Refresh (⌘R)")
                 }
-            }
-
-            ToolbarItemGroup(placement: .secondaryAction) {
-                Button {
-                    showHelp = true
-                } label: {
-                    Label("Help", systemImage: "questionmark.circle")
-                }
-                .help("Show help")
             }
         }
         // Sheets
@@ -137,6 +125,9 @@ struct ContentView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .showFinishWorktree)) { _ in
             showFinishWorktree = true
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .showHelp)) { _ in
+            showHelp = true
         }
     }
 

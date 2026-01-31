@@ -125,4 +125,5 @@ extension Notification.Name {
     static let showAddRepository = Notification.Name("showAddRepository")
     static let showCreatePR = Notification.Name("showCreatePR")
     static let showFinishWorktree = Notification.Name("showFinishWorktree")
+    static let showHelp = Notification.Name("showHelp")
 }
