@@ -2,7 +2,7 @@ import SwiftUI
 
 @main
 struct WorktreeManagerApp: App {
-    @StateObject private var store = AppStore()
+    @StateObject private var store = AppStore.makeDefault()
 
     var body: some Scene {
         WindowGroup {

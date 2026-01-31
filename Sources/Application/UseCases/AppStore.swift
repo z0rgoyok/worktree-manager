@@ -33,13 +33,27 @@ final class AppStore: ObservableObject {
 
     // MARK: - Initialization
 
+    /// Factory method for creating AppStore with default dependencies
+    /// This method belongs in the composition root but is provided here for convenience
+    static func makeDefault(loadOnInit: Bool = true) -> AppStore {
+        AppStore(
+            git: GitService.shared,
+            preferences: StorageService.shared,
+            editorOpener: EditorService.shared,
+            fileSystemWatcher: FileSystemWatcher(),
+            fileSystem: FileSystemService.shared,
+            system: SystemService.shared,
+            loadOnInit: loadOnInit
+        )
+    }
+
     init(
-        git: GitClient = GitService.shared,
-        preferences: PreferencesStore = StorageService.shared,
-        editorOpener: EditorOpening = EditorService.shared,
-        fileSystemWatcher: FileSystemWatching = FileSystemWatcher(),
-        fileSystem: FileSystemHandling = FileSystemService.shared,
-        system: SystemOpening = SystemService.shared,
+        git: GitClient,
+        preferences: PreferencesStore,
+        editorOpener: EditorOpening,
+        fileSystemWatcher: FileSystemWatching,
+        fileSystem: FileSystemHandling,
+        system: SystemOpening,
         loadOnInit: Bool = true
     ) {
         self.git = git

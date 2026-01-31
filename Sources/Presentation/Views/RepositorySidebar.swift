@@ -142,5 +142,5 @@ struct AddRepositorySheet: View {
 
 #Preview {
     RepositorySidebar()
-        .environmentObject(AppStore())
+        .environmentObject(AppStore.makeDefault())
 }

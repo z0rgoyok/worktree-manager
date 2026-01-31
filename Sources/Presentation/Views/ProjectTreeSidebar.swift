@@ -577,6 +577,6 @@ struct StatusBadge: View {
 
 #Preview {
     ProjectTreeSidebar(selection: .constant(nil))
-        .environmentObject(AppStore())
+        .environmentObject(AppStore.makeDefault())
         .frame(width: 280, height: 500)
 }
