@@ -7,7 +7,7 @@ struct RepositoryDetailHeader: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack {
+            HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: DS.Spacing.sm) {
                     HStack(spacing: DS.Spacing.sm) {
                         Image(systemName: "folder.fill")
@@ -30,6 +30,8 @@ struct RepositoryDetailHeader: View {
                             .font(.caption)
                             .foregroundStyle(DS.Colors.textTertiary)
                     }
+
+                    RepositoryStatusPlaceholderRow()
                 }
 
                 Spacer()
@@ -41,4 +43,3 @@ struct RepositoryDetailHeader: View {
         }
     }
 }
-

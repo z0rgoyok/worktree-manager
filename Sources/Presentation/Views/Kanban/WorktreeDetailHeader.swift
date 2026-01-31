@@ -9,7 +9,7 @@ struct WorktreeDetailHeader: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack(alignment: .center, spacing: DS.Spacing.lg) {
+            HStack(alignment: .top, spacing: DS.Spacing.lg) {
                 // Left: Info
                 VStack(alignment: .leading, spacing: DS.Spacing.sm) {
                     // Name + badges
@@ -57,10 +57,9 @@ struct WorktreeDetailHeader: View {
                         .foregroundStyle(DS.Colors.textTertiary)
                     }
 
-                    // Status row
-                    if !worktree.isPrunable {
-                        WorktreeStatusRow(status: statusCell.value)
-                    }
+                    WorktreeStatusRow(status: statusCell.value)
+                        .opacity(worktree.isPrunable ? 0 : 1)
+                        .accessibilityHidden(worktree.isPrunable)
                 }
 
                 Spacer()

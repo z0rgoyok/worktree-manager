@@ -6,6 +6,13 @@ struct WorktreeStatusRow: View {
     var body: some View {
         HStack(spacing: DS.Spacing.md) {
             if let status = status {
+                let hasAnySignal = status.isDirty || status.ahead > 0 || status.behind > 0 || status.prStatus != nil || !status.hasRemote
+
+                if !hasAnySignal {
+                    Label("Clean", systemImage: "checkmark.circle")
+                        .foregroundStyle(.secondary)
+                }
+
                 if status.isDirty {
                     Label("Modified", systemImage: "pencil.circle.fill")
                         .foregroundStyle(.orange)
@@ -37,4 +44,3 @@ struct WorktreeStatusRow: View {
         .font(.caption)
     }
 }
-
