@@ -6,6 +6,12 @@ final class GitService {
 
     private init() {}
 
+    private struct ProcessResult {
+        let exitCode: Int32
+        let output: String
+        let error: String
+    }
+
     // MARK: - Repository Operations
 
     /// Check if path is a git repository
@@ -400,14 +406,6 @@ final class GitService {
             return lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending
         }
     }
-}
-
-// MARK: - Helper Types
-
-private struct ProcessResult {
-    let exitCode: Int32
-    let output: String
-    let error: String
 }
 
 private extension String {

@@ -6,6 +6,17 @@ final class EditorService {
 
     private init() {}
 
+    enum EditorError: LocalizedError {
+        case failedToOpen(editor: String, error: String)
+
+        var errorDescription: String? {
+            switch self {
+            case .failedToOpen(let editor, let error):
+                return "Failed to open in \(editor): \(error)"
+            }
+        }
+    }
+
     /// Open a path in the specified editor
     func open(path: String, with editor: Editor) throws {
         let process = Process()
@@ -88,16 +99,5 @@ final class EditorService {
 
     func availableEditors() -> [Editor] {
         Editor.builtIn
-    }
-}
-
-enum EditorError: LocalizedError {
-    case failedToOpen(editor: String, error: String)
-
-    var errorDescription: String? {
-        switch self {
-        case .failedToOpen(let editor, let error):
-            return "Failed to open in \(editor): \(error)"
-        }
     }
 }
