@@ -1,12 +1,14 @@
 import SwiftUI
 
 struct WorktreeMenuItems: View {
-    @ObservedObject var store: AppStore
+    @ObservedObject var root: RootComponent
+    @ObservedObject var workspace: WorkspaceComponent
     let worktree: Worktree?
     let includeNewWorktree: Bool
 
-    init(store: AppStore, worktree: Worktree?, includeNewWorktree: Bool) {
-        self.store = store
+    init(root: RootComponent, workspace: WorkspaceComponent, worktree: Worktree?, includeNewWorktree: Bool) {
+        self.root = root
+        self.workspace = workspace
         self.worktree = worktree
         self.includeNewWorktree = includeNewWorktree
     }
@@ -14,15 +16,15 @@ struct WorktreeMenuItems: View {
     var body: some View {
         Group {
             if let worktree {
-                WorktreeBoundMenuItems(store: store, worktree: worktree)
+                WorktreeBoundMenuItems(root: root, workspace: workspace, worktree: worktree)
 
                 if includeNewWorktree {
                     Divider()
                     Button("New Worktree...") {
-                        NotificationCenter.default.post(name: .showAddWorktree, object: nil)
+                        root.send(.presentSheet(.addWorktree))
                     }
                     .keyboardShortcut("n", modifiers: .command)
-                    .disabled(store.selectedRepository == nil)
+                    .disabled(workspace.state.selectedRepository == nil)
                 }
             } else {
                 WorktreeUnboundMenuItems()
@@ -74,27 +76,29 @@ struct WorktreeMenuItems: View {
     }
 
     private struct WorktreeBoundMenuItems: View {
-        @ObservedObject var store: AppStore
+        @ObservedObject var root: RootComponent
+        @ObservedObject var workspace: WorkspaceComponent
         let worktree: Worktree
         @ObservedObject var statusCell: WorktreeStatusCell
 
-        init(store: AppStore, worktree: Worktree) {
-            self.store = store
+        init(root: RootComponent, workspace: WorkspaceComponent, worktree: Worktree) {
+            self.root = root
+            self.workspace = workspace
             self.worktree = worktree
-            self.statusCell = store.statusStore.cell(forWorktreePath: worktree.path)
+            self.statusCell = workspace.statusCell(for: worktree.path)
         }
 
         var body: some View {
             Section {
                 Button("Open in Editor") {
-                    store.openInEditor(worktree)
+                    workspace.openInEditor(worktree)
                 }
                 .keyboardShortcut("o", modifiers: .command)
 
                 Menu("Open in...") {
-                    ForEach(store.configuredEditors) { editor in
+                    ForEach(workspace.configuredEditors()) { editor in
                         Button(editor.name) {
-                            store.openInEditor(worktree, editor: editor)
+                            workspace.openInEditor(worktree, editor: editor)
                         }
                     }
                 }
@@ -102,12 +106,12 @@ struct WorktreeMenuItems: View {
 
             Section {
                 Button("Show in Finder") {
-                    store.openInFinder(worktree)
+                    workspace.openInFinder(worktree)
                 }
                 .keyboardShortcut("f", modifiers: [.command, .shift])
 
                 Button("Open in Terminal") {
-                    store.openInTerminal(worktree)
+                    workspace.openInTerminal(worktree)
                 }
                 .keyboardShortcut("t", modifiers: [.command, .shift])
 
@@ -121,12 +125,12 @@ struct WorktreeMenuItems: View {
             if !worktree.isMain {
                 Section {
                     Button("Push") {
-                        Task { await store.push(worktree) }
+                        Task { await workspace.push(worktree) }
                     }
                     .keyboardShortcut("p", modifiers: [.command, .shift])
 
                     Button("Pull") {
-                        Task { await store.pull(worktree) }
+                        Task { await workspace.pull(worktree) }
                     }
                     .keyboardShortcut("p", modifiers: [.command, .option])
                 }
@@ -134,12 +138,12 @@ struct WorktreeMenuItems: View {
                 Section {
                     if let pr = statusCell.value?.prStatus {
                         Button(pr.isMerged ? "View Merged PR" : "View PR #\(pr.number)") {
-                            store.openPR(worktree)
+                            workspace.openPR(worktree)
                         }
                     } else {
                         Button("Create Pull Request...") {
-                            store.selectedWorktree = worktree
-                            NotificationCenter.default.post(name: .showCreatePR, object: nil)
+                            workspace.selectWorktree(worktree)
+                            root.send(.presentSheet(.createPR(worktreePath: worktree.path)))
                         }
                     }
                 }
@@ -147,30 +151,29 @@ struct WorktreeMenuItems: View {
                 Section {
                     if worktree.isLocked {
                         Button("Unlock") {
-                            Task { await store.unlockWorktree(worktree) }
+                            Task { await workspace.unlockWorktree(worktree) }
                         }
                     } else {
                         Button("Lock") {
-                            Task { await store.lockWorktree(worktree) }
+                            Task { await workspace.lockWorktree(worktree) }
                         }
                     }
                 }
 
                 Section {
                     Button("Finish Worktree...") {
-                        store.selectedWorktree = worktree
-                        NotificationCenter.default.post(name: .showFinishWorktree, object: nil)
+                        workspace.selectWorktree(worktree)
+                        root.send(.presentSheet(.completeWorktree(worktreePath: worktree.path)))
                     }
                 }
             }
 
             Section {
                 Button("Refresh Status") {
-                    Task { await store.refreshWorktreeStatus(worktree) }
+                    Task { await workspace.refreshWorktreeStatus(worktree) }
                 }
                 .keyboardShortcut("r", modifiers: .command)
             }
         }
     }
 }
-

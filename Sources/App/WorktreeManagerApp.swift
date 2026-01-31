@@ -2,18 +2,20 @@ import SwiftUI
 
 @main
 struct WorktreeManagerApp: App {
-    @StateObject private var store = AppStore.makeDefault()
+    @StateObject private var root = RootComponent.makeDefault()
 
     var body: some Scene {
         WindowGroup {
             ContentView()
-                .environmentObject(store)
-                .environmentObject(store.activityCenter)
+                .environmentObject(root)
+                .environmentObject(root.workspace)
+                .environmentObject(root.settings)
+                .environmentObject(root.activityCenter)
         }
         .windowStyle(.titleBar)
         .windowToolbarStyle(.unified(showsTitle: true))
         .commands {
-            WorktreeCommands(store: store)
+            WorktreeCommands(root: root)
 
             CommandGroup(replacing: .newItem) {}
 
@@ -30,8 +32,7 @@ struct WorktreeManagerApp: App {
 
         Settings {
             SettingsView()
-                .environmentObject(store)
-                .environmentObject(store.activityCenter)
+                .environmentObject(root.settings)
         }
     }
 }

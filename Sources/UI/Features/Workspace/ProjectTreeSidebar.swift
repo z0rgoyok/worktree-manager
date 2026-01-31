@@ -2,9 +2,9 @@ import SwiftUI
 
 /// Native tree sidebar showing projects with worktrees nested inside
 struct ProjectTreeSidebar: View {
-    @EnvironmentObject var store: AppStore
+    @EnvironmentObject var root: RootComponent
+    @EnvironmentObject var workspace: WorkspaceComponent
     @Binding var selection: SidebarSelection?
-    @State private var showAddRepo = false
     @State private var expandedRepositories: Set<UUID> = []
     @State private var repositoryForCopySettings: Repository?
     @State private var worktreesCache: [UUID: [Worktree]] = [:]  // repo.id -> worktrees
@@ -22,7 +22,7 @@ struct ProjectTreeSidebar: View {
                 Spacer()
 
                 Button {
-                    showAddRepo = true
+                    root.send(.presentSheet(.addRepository))
                 } label: {
                     Image(systemName: "plus")
                         .font(.system(size: 12, weight: .medium))
@@ -37,7 +37,7 @@ struct ProjectTreeSidebar: View {
             Divider()
 
             // Tree content
-            if store.repositories.isEmpty {
+            if workspace.state.repositories.isEmpty {
                 // Empty state
                 VStack(spacing: DS.Spacing.lg) {
                     Spacer()
@@ -58,7 +58,7 @@ struct ProjectTreeSidebar: View {
                     }
 
                     Button {
-                        showAddRepo = true
+                        root.send(.presentSheet(.addRepository))
                     } label: {
                         Label("Add Repository", systemImage: "plus")
                     }
@@ -72,7 +72,7 @@ struct ProjectTreeSidebar: View {
             } else {
                 ScrollView {
                     LazyVStack(spacing: 0) {
-                        ForEach(store.repositories) { repo in
+                        ForEach(workspace.state.repositories) { repo in
                             ProjectTreeNode(
                                 repository: repo,
                                 selection: $selection,
@@ -105,31 +105,28 @@ struct ProjectTreeSidebar: View {
         .toolbar {
             ToolbarItem(placement: .automatic) {
                 Button {
-                    NotificationCenter.default.post(name: .showHelp, object: nil)
+                    root.send(.presentSheet(.help))
                 } label: {
                     Label("Help", systemImage: "questionmark.circle")
                 }
                 .help("Show help")
             }
         }
-        .sheet(isPresented: $showAddRepo) {
-            AddRepositorySheet()
-        }
         .sheet(item: $repositoryForCopySettings) { repo in
-            RepositoryCopyPatternsSheet(repository: repo, store: store)
+            RepositoryCopyPatternsSheet(repository: repo)
         }
         .onAppear {
             initializeSelection()
         }
-        .onChange(of: store.repositories) { _, repos in
+        .onChange(of: workspace.state.repositories) { _, repos in
             // Drop expansion state for repositories that no longer exist.
             expandedRepositories = expandedRepositories.intersection(Set(repos.map(\.id)))
 
-            if selection == nil, let repo = store.selectedRepository {
+            if selection == nil, let repo = workspace.state.selectedRepository {
                 selection = .repository(repo)
             }
         }
-        .onChange(of: store.selectedRepository) { _, repo in
+        .onChange(of: workspace.state.selectedRepository) { _, repo in
             // Sync external selection changes
             if let repo = repo, selection?.repository.id != repo.id {
                 selection = .repository(repo)
@@ -139,9 +136,9 @@ struct ProjectTreeSidebar: View {
                 }
             }
         }
-        .onChange(of: store.worktrees) { _, worktrees in
+        .onChange(of: workspace.state.worktrees) { _, worktrees in
             // Sync worktrees cache for selected repository
-            if let repo = store.selectedRepository {
+            if let repo = workspace.state.selectedRepository {
                 withAnimation(DS.Animation.quick) {
                     worktreesCache[repo.id] = worktrees
                     loadingRepositories.remove(repo.id)
@@ -175,20 +172,20 @@ struct ProjectTreeSidebar: View {
 
         Task {
             // Use store's git client to load worktrees without changing selection
-            if store.selectedRepository?.id == repo.id {
+            if workspace.state.selectedRepository?.id == repo.id {
                 // Selected repository: rely on the store's selected worktrees (loaded elsewhere),
                 // and keep a loading placeholder until they arrive.
-                if !store.worktrees.isEmpty {
+                if !workspace.state.worktrees.isEmpty {
                     await MainActor.run {
                         withAnimation(DS.Animation.quick) {
-                            worktreesCache[repo.id] = store.worktrees
+                            worktreesCache[repo.id] = workspace.state.worktrees
                             loadingRepositories.remove(repo.id)
                         }
                     }
                 }
             } else {
                 // Load independently without changing selection
-                let loadedWorktrees = await store.loadWorktreesOnly(for: repo)
+                let loadedWorktrees = await workspace.loadWorktreesOnly(for: repo)
                 await MainActor.run {
                     withAnimation(DS.Animation.quick) {
                         worktreesCache[repo.id] = loadedWorktrees
@@ -208,7 +205,7 @@ struct ProjectTreeSidebar: View {
             return
         }
 
-        if let repo = store.selectedRepository {
+        if let repo = workspace.state.selectedRepository {
             selection = .repository(repo)
             expandedRepositories.insert(repo.id)
             if worktreesCache[repo.id] == nil {
@@ -219,7 +216,9 @@ struct ProjectTreeSidebar: View {
 }
 
 #Preview {
-    ProjectTreeSidebar(selection: .constant(nil))
-        .environmentObject(AppStore.makeDefault())
+    let root = RootComponent.makeDefault(loadOnInit: false)
+    return ProjectTreeSidebar(selection: .constant(nil))
+        .environmentObject(root)
+        .environmentObject(root.workspace)
         .frame(width: 280, height: 500)
 }

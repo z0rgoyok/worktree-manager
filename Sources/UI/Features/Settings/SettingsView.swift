@@ -1,20 +1,20 @@
 import SwiftUI
 
 struct SettingsView: View {
-    @EnvironmentObject var store: AppStore
+    @EnvironmentObject var settings: SettingsComponent
 
     var body: some View {
         TabView {
             GeneralSettingsView(
                 worktreeBasePath: Binding(
-                    get: { store.worktreeBasePath },
-                    set: { store.setWorktreeBasePath($0) }
+                    get: { settings.state.worktreeBasePath },
+                    set: { settings.setWorktreeBasePath($0) }
                 ),
                 defaultEditorId: Binding(
-                    get: { store.defaultEditorId },
-                    set: { store.setDefaultEditorId($0) }
+                    get: { settings.state.defaultEditorId },
+                    set: { settings.setDefaultEditorId($0) }
                 ),
-                availableEditors: store.availableEditors()
+                availableEditors: settings.state.availableEditors
             )
             .tabItem {
                 Label("General", systemImage: "gear")
@@ -22,8 +22,8 @@ struct SettingsView: View {
 
             CopyPatternsSettingsView(
                 patterns: Binding(
-                    get: { store.defaultCopyPatterns },
-                    set: { store.setDefaultCopyPatterns($0) }
+                    get: { settings.state.defaultCopyPatterns },
+                    set: { settings.setDefaultCopyPatterns($0) }
                 )
             )
             .tabItem {
@@ -36,5 +36,5 @@ struct SettingsView: View {
 
 #Preview {
     SettingsView()
-        .environmentObject(AppStore.makeDefault())
+        .environmentObject(SettingsComponent(store: AppStore.makeDefault(loadOnInit: false)))
 }

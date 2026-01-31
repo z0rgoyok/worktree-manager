@@ -32,6 +32,18 @@ final class SettingsComponent: ObservableObject {
         store.setDefaultCopyPatterns(newValue)
     }
 
+    func copyPatterns(for repo: Repository) -> [CopyPattern]? {
+        store.copyPatterns(for: repo)
+    }
+
+    func setCopyPatterns(_ patterns: [CopyPattern], for repo: Repository) {
+        store.setCopyPatterns(patterns, for: repo)
+    }
+
+    func removeCopyPatterns(for repo: Repository) {
+        store.removeCopyPatterns(for: repo)
+    }
+
     private func bindStore() {
         store.$worktreeBasePath
             .sink { [weak self] in self?.state.worktreeBasePath = $0 }
@@ -48,4 +60,3 @@ final class SettingsComponent: ObservableObject {
         state.availableEditors = store.availableEditors()
     }
 }
-

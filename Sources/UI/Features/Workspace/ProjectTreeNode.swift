@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct ProjectTreeNode: View {
-    @EnvironmentObject var store: AppStore
+    @EnvironmentObject var workspace: WorkspaceComponent
     let repository: Repository
     @Binding var selection: SidebarSelection?
     @Binding var isExpanded: Bool
@@ -89,7 +89,6 @@ struct ProjectTreeNode: View {
                 } else {
                     // Select and expand
                     selection = .repository(repository)
-                    Task { await store.selectRepository(repository) }
                     if !isExpanded {
                         withAnimation(DS.Animation.quick) {
                             isExpanded = true
@@ -118,7 +117,7 @@ struct ProjectTreeNode: View {
                 Divider()
 
                 Button("Remove from List", role: .destructive) {
-                    Task { await store.removeRepository(repository) }
+                    Task { await workspace.removeRepository(repository) }
                 }
             }
 
@@ -155,7 +154,7 @@ struct ProjectTreeNode: View {
                     worktree: worktree,
                     repository: repository,
                     selection: $selection,
-                    statusCell: store.statusStore.cell(forWorktreePath: worktree.path)
+                    statusCell: workspace.statusCell(for: worktree.path)
                 )
             }
         }

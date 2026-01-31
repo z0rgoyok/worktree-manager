@@ -14,20 +14,15 @@ extension AppStore {
     }
 
     /// Open worktree in the default editor
-    func openInEditor(_ worktree: Worktree) {
+    func openInEditor(_ worktree: Worktree) throws {
         guard let editor = defaultEditor else {
-            showError(message: "No editor configured")
-            return
+            throw AppStoreError.noEditorConfigured
         }
-        openInEditor(worktree, editor: editor)
+        try openInEditor(worktree, editor: editor)
     }
 
-    func openInEditor(_ worktree: Worktree, editor: Editor) {
-        do {
-            try editorOpener.open(path: worktree.path, with: editor)
-        } catch {
-            showError(message: error.localizedDescription)
-        }
+    func openInEditor(_ worktree: Worktree, editor: Editor) throws {
+        try editorOpener.open(path: worktree.path, with: editor)
     }
 
     func openInFinder(_ worktree: Worktree) {

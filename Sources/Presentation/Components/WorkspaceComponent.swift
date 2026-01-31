@@ -16,6 +16,7 @@ final class WorkspaceComponent: ObservableObject {
 
     enum Effect: Equatable {
         case showAlert(title: String, message: String)
+        case openURL(URL)
     }
 
     enum Action: Equatable {
@@ -52,11 +53,15 @@ final class WorkspaceComponent: ObservableObject {
         case .presentCompleteWorktree(let worktreePath):
             root?.send(.presentSheet(.completeWorktree(worktreePath: worktreePath)))
         case .presentHelp:
-            root?.send(.selectChild(.help))
+            root?.send(.presentSheet(.help))
         case .refresh:
             Task { [weak self] in
                 guard let self else { return }
-                await self.store.refreshWorktrees()
+                do {
+                    try await self.store.refreshWorktrees()
+                } catch {
+                    self.effectsEmitter.emit(.showAlert(title: "Error", message: error.localizedDescription))
+                }
             }
         case .setSidebarSelection(let selection):
             Task { [weak self] in
@@ -67,7 +72,11 @@ final class WorkspaceComponent: ObservableObject {
     }
 
     func addRepository(at path: String) async {
-        await store.addRepository(at: path)
+        do {
+            try await store.addRepository(at: path)
+        } catch {
+            effectsEmitter.emit(.showAlert(title: "Error", message: error.localizedDescription))
+        }
     }
 
     func createWorktree(
@@ -77,17 +86,25 @@ final class WorkspaceComponent: ObservableObject {
         baseBranch: String?,
         copyPatterns: [CopyPattern]?
     ) async {
-        await store.createWorktree(
-            name: name,
-            branch: branch,
-            createNewBranch: createNewBranch,
-            baseBranch: baseBranch,
-            copyPatterns: copyPatterns
-        )
+        do {
+            try await store.createWorktree(
+                name: name,
+                branch: branch,
+                createNewBranch: createNewBranch,
+                baseBranch: baseBranch,
+                copyPatterns: copyPatterns
+            )
+        } catch {
+            effectsEmitter.emit(.showAlert(title: "Error", message: error.localizedDescription))
+        }
     }
 
     func recreateBranchAndWorktree(name: String, branch: String, baseBranch: String, copyPatterns: [CopyPattern]?) async {
-        await store.recreateBranchAndWorktree(name: name, branch: branch, baseBranch: baseBranch, copyPatterns: copyPatterns)
+        do {
+            try await store.recreateBranchAndWorktree(name: name, branch: branch, baseBranch: baseBranch, copyPatterns: copyPatterns)
+        } catch {
+            effectsEmitter.emit(.showAlert(title: "Error", message: error.localizedDescription))
+        }
     }
 
     func loadBranches() async {
@@ -110,8 +127,33 @@ final class WorkspaceComponent: ObservableObject {
         await store.loadCopyPreview(for: repo)
     }
 
+    func loadWorktreesOnly(for repo: Repository) async -> [Worktree] {
+        await store.loadWorktreesOnly(for: repo)
+    }
+
     func statusCell(for worktreePath: String) -> WorktreeStatusCell {
         store.statusStore.cell(forWorktreePath: worktreePath)
+    }
+
+    func selectWorktree(_ worktree: Worktree?) {
+        store.selectedWorktree = worktree
+        state.selectedWorktree = worktree
+    }
+
+    func removeRepository(_ repo: Repository) async {
+        await store.removeRepository(repo)
+    }
+
+    func completeWorktree(_ worktree: Worktree, options: CompleteWorktreeOptions) async {
+        do {
+            try await store.completeWorktree(worktree, options: options)
+        } catch {
+            effectsEmitter.emit(.showAlert(title: "Error", message: error.localizedDescription))
+        }
+    }
+
+    func loadHasRemoteBranch(for worktree: Worktree) async -> Bool {
+        await store.loadHasRemoteBranch(for: worktree)
     }
 
     func openInFinder(_ worktree: Worktree) {
@@ -123,11 +165,19 @@ final class WorkspaceComponent: ObservableObject {
     }
 
     func openInEditor(_ worktree: Worktree) {
-        store.openInEditor(worktree)
+        do {
+            try store.openInEditor(worktree)
+        } catch {
+            effectsEmitter.emit(.showAlert(title: "Error", message: error.localizedDescription))
+        }
     }
 
     func openInEditor(_ worktree: Worktree, editor: Editor) {
-        store.openInEditor(worktree, editor: editor)
+        do {
+            try store.openInEditor(worktree, editor: editor)
+        } catch {
+            effectsEmitter.emit(.showAlert(title: "Error", message: error.localizedDescription))
+        }
     }
 
     func configuredEditors() -> [Editor] {
@@ -135,11 +185,19 @@ final class WorkspaceComponent: ObservableObject {
     }
 
     func push(_ worktree: Worktree) async {
-        await store.push(worktree)
+        do {
+            try await store.push(worktree)
+        } catch {
+            effectsEmitter.emit(.showAlert(title: "Error", message: error.localizedDescription))
+        }
     }
 
     func pull(_ worktree: Worktree) async {
-        await store.pull(worktree)
+        do {
+            try await store.pull(worktree)
+        } catch {
+            effectsEmitter.emit(.showAlert(title: "Error", message: error.localizedDescription))
+        }
     }
 
     func refreshWorktreeStatus(_ worktree: Worktree) async {
@@ -147,31 +205,58 @@ final class WorkspaceComponent: ObservableObject {
     }
 
     func createPR(_ worktree: Worktree, title: String, body: String, baseBranch: String?) async {
-        await store.createPR(worktree, title: title, body: body, baseBranch: baseBranch)
+        do {
+            let url = try await store.createPR(worktree, title: title, body: body, baseBranch: baseBranch)
+            effectsEmitter.emit(.openURL(url))
+        } catch {
+            effectsEmitter.emit(.showAlert(title: "Error", message: error.localizedDescription))
+        }
     }
 
     func openPR(_ worktree: Worktree) {
-        store.openPR(worktree)
+        if let url = store.openPRURL(worktree) {
+            effectsEmitter.emit(.openURL(url))
+        }
     }
 
     func mergeBranch(_ worktree: Worktree, into targetBranch: String) async {
-        await store.mergeBranch(worktree, into: targetBranch)
+        do {
+            try await store.mergeBranch(worktree, into: targetBranch)
+        } catch {
+            effectsEmitter.emit(.showAlert(title: "Error", message: error.localizedDescription))
+        }
     }
 
     func lockWorktree(_ worktree: Worktree) async {
-        await store.lockWorktree(worktree)
+        do {
+            try await store.lockWorktree(worktree)
+        } catch {
+            effectsEmitter.emit(.showAlert(title: "Error", message: error.localizedDescription))
+        }
     }
 
     func unlockWorktree(_ worktree: Worktree) async {
-        await store.unlockWorktree(worktree)
+        do {
+            try await store.unlockWorktree(worktree)
+        } catch {
+            effectsEmitter.emit(.showAlert(title: "Error", message: error.localizedDescription))
+        }
     }
 
     func pruneWorktrees() async {
-        await store.pruneWorktrees()
+        do {
+            try await store.pruneWorktrees()
+        } catch {
+            effectsEmitter.emit(.showAlert(title: "Error", message: error.localizedDescription))
+        }
     }
 
     func removeWorktree(_ worktree: Worktree, force: Bool = false, deleteBranch: Bool = false) async {
-        await store.removeWorktree(worktree, force: force, deleteBranch: deleteBranch)
+        do {
+            try await store.removeWorktree(worktree, force: force, deleteBranch: deleteBranch)
+        } catch {
+            effectsEmitter.emit(.showAlert(title: "Error", message: error.localizedDescription))
+        }
     }
 
     private func bindStore() {
@@ -199,18 +284,6 @@ final class WorkspaceComponent: ObservableObject {
             .sink { [weak self] in self?.state.worktreeBasePath = $0 }
             .store(in: &cancellables)
 
-        // Bridge application-level error state into presentation effects.
-        store.$showError
-            .removeDuplicates()
-            .sink { [weak self] isPresented in
-                guard let self else { return }
-                guard isPresented else { return }
-                let message = self.store.error ?? "Unknown error"
-                self.effectsEmitter.emit(.showAlert(title: "Error", message: message))
-                self.store.clearError()
-            }
-            .store(in: &cancellables)
-
         // Mirror initial selection to UI selection.
         if let repo = store.selectedRepository {
             state.sidebarSelection = .repository(repo)
@@ -226,7 +299,12 @@ final class WorkspaceComponent: ObservableObject {
         }
 
         if store.selectedRepository?.id != selection.repository.id {
-            await store.selectRepository(selection.repository)
+            do {
+                try await store.selectRepository(selection.repository)
+            } catch {
+                effectsEmitter.emit(.showAlert(title: "Error", message: error.localizedDescription))
+                return
+            }
         }
 
         if case .worktree(let wt, _) = selection {

@@ -1,7 +1,8 @@
 import SwiftUI
 
 struct WorktreeTreeRow: View {
-    @EnvironmentObject var store: AppStore
+    @EnvironmentObject var root: RootComponent
+    @EnvironmentObject var workspace: WorkspaceComponent
     @EnvironmentObject var activityCenter: ActivityCenter
     let worktree: Worktree
     let repository: Repository
@@ -85,18 +86,18 @@ struct WorktreeTreeRow: View {
             RightClickHandlerView(
                 onLeftClick: {
                     selection = .worktree(worktree, inRepository: repository)
-                    store.selectedWorktree = worktree
+                    workspace.selectWorktree(worktree)
                 },
                 onRightClick: {
                     selection = .worktree(worktree, inRepository: repository)
-                    store.selectedWorktree = worktree
+                    workspace.selectWorktree(worktree)
                 }
             )
             .allowsHitTesting(true)
             .accessibilityHidden(true)
         }
         .contextMenu {
-            WorktreeMenuItems(store: store, worktree: worktree, includeNewWorktree: false)
+            WorktreeMenuItems(root: root, workspace: workspace, worktree: worktree, includeNewWorktree: false)
         }
         .animation(DS.Animation.quick, value: activityCenter.currentActivity(forWorktreePath: worktree.path) != nil)
     }

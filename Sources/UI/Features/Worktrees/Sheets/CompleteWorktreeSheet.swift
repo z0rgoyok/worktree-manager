@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct CompleteWorktreeSheet: View {
-    @EnvironmentObject var store: AppStore
+    @EnvironmentObject var workspace: WorkspaceComponent
     @Environment(\.dismiss) var dismiss
     let worktree: Worktree
     @ObservedObject var statusCell: WorktreeStatusCell
@@ -39,7 +39,7 @@ struct CompleteWorktreeSheet: View {
     }
 
     private var targetBranch: String {
-        worktree.baseBranch ?? store.preferredBaseBranch() ?? "main"
+        worktree.baseBranch ?? workspace.preferredBaseBranch() ?? "main"
     }
 
     private var canDeleteBranch: Bool {
@@ -204,7 +204,7 @@ struct CompleteWorktreeSheet: View {
         )
         Task {
             isSubmitting = true
-            await store.completeWorktree(worktree, options: options)
+            await workspace.completeWorktree(worktree, options: options)
             isSubmitting = false
             dismiss()
         }
@@ -221,6 +221,6 @@ struct CompleteWorktreeSheet: View {
             selectedAction = .prMerged
         }
 
-        hasRemoteBranch = await store.loadHasRemoteBranch(for: worktree)
+        hasRemoteBranch = await workspace.loadHasRemoteBranch(for: worktree)
     }
 }

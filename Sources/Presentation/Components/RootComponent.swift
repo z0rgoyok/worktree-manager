@@ -26,6 +26,7 @@ final class RootComponent: ObservableObject {
         case addWorktree
         case createPR(worktreePath: String)
         case completeWorktree(worktreePath: String)
+        case help
 
         var id: String {
             switch self {
@@ -33,6 +34,7 @@ final class RootComponent: ObservableObject {
             case .addWorktree: return "addWorktree"
             case .createPR(let path): return "createPR:\(path)"
             case .completeWorktree(let path): return "completeWorktree:\(path)"
+            case .help: return "help"
             }
         }
     }

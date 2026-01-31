@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct CreatePRSheet: View {
-    @EnvironmentObject var store: AppStore
+    @EnvironmentObject var workspace: WorkspaceComponent
     @Environment(\.dismiss) var dismiss
     let worktree: Worktree
 
@@ -13,7 +13,7 @@ struct CreatePRSheet: View {
 
     private var baseBranches: [String] {
         let common = ["main", "master", "develop"]
-        let available = store.branches.filter { common.contains($0) }
+        let available = workspace.state.branches.filter { common.contains($0) }
         return available.isEmpty ? common : available
     }
 
@@ -60,7 +60,7 @@ struct CreatePRSheet: View {
                 Button("Create PR") {
                     Task {
                         isSubmitting = true
-                        await store.createPR(
+                        await workspace.createPR(
                             worktree,
                             title: title.isEmpty ? worktree.branch : title,
                             body: prDescription,
@@ -72,7 +72,7 @@ struct CreatePRSheet: View {
                 }
                 .keyboardShortcut(.defaultAction)
                 .buttonStyle(.borderedProminent)
-                .disabled(store.branches.isEmpty || isPreparing || isSubmitting)
+                .disabled(workspace.state.branches.isEmpty || isPreparing || isSubmitting)
             }
         }
         .padding(24)
@@ -94,8 +94,8 @@ struct CreatePRSheet: View {
         isPreparing = true
         defer { isPreparing = false }
 
-        if store.branches.isEmpty {
-            await store.loadBranches()
+        if workspace.state.branches.isEmpty {
+            await workspace.loadBranches()
         }
 
         title = worktree.branch

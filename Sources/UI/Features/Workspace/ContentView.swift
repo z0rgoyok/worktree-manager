@@ -1,16 +1,49 @@
 import SwiftUI
+import AppKit
 
 struct ContentView: View {
-    @EnvironmentObject var store: AppStore
+    @EnvironmentObject var root: RootComponent
+    @EnvironmentObject var workspace: WorkspaceComponent
     @EnvironmentObject var activityCenter: ActivityCenter
-    @State private var showAddWorktree = false
-    @State private var showAddRepository = false
-    @State private var showCreatePR = false
-    @State private var showFinishWorktree = false
-    @State private var showHelp = false
     @State private var sidebarSelection: SidebarSelection?
+    @State private var alert: AlertState?
 
     var body: some View {
+        splitView
+            .frame(minWidth: 900, minHeight: 550)
+            .navigationTitle(navigationTitle)
+            .toolbar { toolbarContent }
+            .sheet(item: sheetBinding) { SheetContent(sheet: $0, worktreeLookup: worktree(for:)) }
+            .alert(alert?.title ?? "", isPresented: alertIsPresented) {
+                Button("OK") { alert = nil }
+            } message: {
+                Text(alert?.message ?? "")
+            }
+            .onChange(of: sidebarSelection) { _, newSelection in
+                workspace.send(.setSidebarSelection(newSelection), root: root)
+            }
+            .onAppear {
+                if sidebarSelection == nil {
+                    sidebarSelection = workspace.state.sidebarSelection
+                }
+                if sidebarSelection == nil, let repo = workspace.state.selectedRepository {
+                    sidebarSelection = .repository(repo)
+                }
+            }
+            .task {
+                for await effect in root.effects {
+                    switch effect {
+                    case .showAlert(let title, let message):
+                        alert = AlertState(title: title, message: message)
+                    case .openURL(let url):
+                        NSWorkspace.shared.open(url)
+                    }
+                }
+            }
+            .animation(DS.Animation.quick, value: activityCenter.currentGlobal)
+    }
+
+    private var splitView: some View {
         NavigationSplitView {
             ProjectTreeSidebar(selection: $sidebarSelection)
                 .frame(minWidth: DS.Sizes.sidebarMinWidth)
@@ -23,144 +56,158 @@ struct ContentView: View {
             KanbanBoard(selection: sidebarSelection)
                 .frame(minWidth: 600)
         }
-        .frame(minWidth: 900, minHeight: 550)
-        .navigationTitle(navigationTitle)
-        .toolbar {
-            ToolbarItemGroup(placement: .primaryAction) {
-                if store.selectedRepository != nil {
+    }
+
+    @ToolbarContentBuilder
+    private var toolbarContent: some ToolbarContent {
+        ToolbarItemGroup(placement: .primaryAction) {
+            if workspace.state.selectedRepository != nil {
+                Button {
+                    root.send(.presentSheet(.addWorktree))
+                } label: {
+                    Label("New Worktree", systemImage: "plus.square.on.square")
+                }
+                .help("New Worktree... (⌘N)")
+
+                if let selectedWorktree = workspace.state.selectedWorktree {
                     Button {
-                        showAddWorktree = true
+                        workspace.openInFinder(selectedWorktree)
                     } label: {
-                        Label("New Worktree", systemImage: "plus.square.on.square")
+                        Label("Finder", systemImage: "folder")
                     }
-                    .help("New Worktree... (⌘N)")
-
-                    if store.selectedWorktree != nil {
-                        Button {
-                            if let wt = store.selectedWorktree {
-                                store.openInFinder(wt)
-                            }
-                        } label: {
-                            Label("Finder", systemImage: "folder")
-                        }
-                        .help("Show in Finder (⇧⌘F)")
-
-                        Button {
-                            if let wt = store.selectedWorktree {
-                                store.openInTerminal(wt)
-                            }
-                        } label: {
-                            Label("Terminal", systemImage: "terminal")
-                        }
-                        .help("Open in Terminal (⇧⌘T)")
-                    }
+                    .help("Show in Finder (⇧⌘F)")
 
                     Button {
-                        Task { await store.refreshWorktrees() }
+                        workspace.openInTerminal(selectedWorktree)
                     } label: {
-                        Label("Refresh", systemImage: "arrow.clockwise")
+                        Label("Terminal", systemImage: "terminal")
                     }
-                    .help("Refresh (⌘R)")
+                    .help("Open in Terminal (⇧⌘T)")
                 }
-            }
 
-            ToolbarItem(placement: .status) {
-                if let activity = activityCenter.currentGlobal {
-                    HStack(spacing: 6) {
-                        ProgressView()
-                            .controlSize(.small)
-                        Text(activity.message)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                    }
-                    .transition(.opacity)
+                Button {
+                    workspace.send(.refresh, root: root)
+                } label: {
+                    Label("Refresh", systemImage: "arrow.clockwise")
                 }
+                .help("Refresh (⌘R)")
             }
         }
-        // Sheets
-        .sheet(isPresented: $showAddWorktree) {
-            AddWorktreeSheet()
-        }
-        .sheet(isPresented: $showAddRepository) {
-            AddRepositorySheet()
-        }
-        .sheet(isPresented: $showCreatePR) {
-            if let worktree = store.selectedWorktree {
-                CreatePRSheet(worktree: worktree)
-            }
-        }
-        .sheet(isPresented: $showFinishWorktree) {
-            if let worktree = store.selectedWorktree {
-                CompleteWorktreeSheet(
-                    worktree: worktree,
-                    statusCell: store.statusStore.cell(forWorktreePath: worktree.path)
-                )
-            }
-        }
-        .sheet(isPresented: $showHelp) {
-            HelpView()
-        }
-        .alert("Error", isPresented: $store.showError) {
-            Button("OK") {
-                store.clearError()
-            }
-        } message: {
-            Text(store.error ?? "Unknown error")
-        }
-        // Sync selection with store
-        .onChange(of: sidebarSelection) { _, newSelection in
-            if let selection = newSelection {
-                Task {
-                    if store.selectedRepository?.id != selection.repository.id {
-                        await store.selectRepository(selection.repository)
-                    }
-                    // Sync selected worktree
-                    if case .worktree(let wt, _) = selection {
-                        store.selectedWorktree = wt
-                    } else {
-                        store.selectedWorktree = nil
-                    }
+
+        ToolbarItem(placement: .status) {
+            if let activity = activityCenter.currentGlobal {
+                HStack(spacing: 6) {
+                    ProgressView()
+                        .controlSize(.small)
+                    Text(activity.message)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
                 }
-            } else {
-                store.selectedWorktree = nil
+                .transition(.opacity)
             }
         }
-        .onAppear {
-            if let repo = store.selectedRepository {
-                sidebarSelection = .repository(repo)
-            }
-        }
-        // Handle notifications from menu commands
-        .onReceive(NotificationCenter.default.publisher(for: .showAddWorktree)) { _ in
-            showAddWorktree = true
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .showAddRepository)) { _ in
-            showAddRepository = true
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .showCreatePR)) { _ in
-            showCreatePR = true
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .showFinishWorktree)) { _ in
-            showFinishWorktree = true
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .showHelp)) { _ in
-            showHelp = true
-        }
-        .animation(DS.Animation.quick, value: activityCenter.currentGlobal)
     }
 
     private var navigationTitle: String {
-        if let worktree = store.selectedWorktree {
+        if let worktree = workspace.state.selectedWorktree {
             return worktree.name
-        } else if let repo = store.selectedRepository {
+        } else if let repo = workspace.state.selectedRepository {
             return repo.name
         }
         return "Worktree Manager"
     }
+
+    private var sheetBinding: Binding<RootComponent.Sheet?> {
+        Binding(
+            get: { root.sheetSlot.child },
+            set: { newValue in
+                if newValue == nil {
+                    root.send(.dismissSheet)
+                } else {
+                    root.sheetSlot.child = newValue
+                }
+            }
+        )
+    }
+
+    private var alertIsPresented: Binding<Bool> {
+        Binding(
+            get: { alert != nil },
+            set: { isPresented in
+                if !isPresented {
+                    alert = nil
+                }
+            }
+        )
+    }
+
+    private func worktree(for path: String) -> Worktree? {
+        if let selected = workspace.state.selectedWorktree, selected.path == path {
+            return selected
+        }
+        return workspace.state.worktrees.first { $0.path == path }
+    }
+
+    private struct SheetContent: View {
+        let sheet: RootComponent.Sheet
+        let worktreeLookup: (String) -> Worktree?
+
+        @EnvironmentObject private var workspace: WorkspaceComponent
+
+        var body: some View {
+            switch sheet {
+            case .addRepository:
+                AddRepositorySheet()
+            case .addWorktree:
+                AddWorktreeSheet()
+            case .createPR(let worktreePath):
+                if let worktree = worktreeLookup(worktreePath) {
+                    CreatePRSheet(worktree: worktree)
+                } else {
+                    VStack(spacing: 8) {
+                        Text("Worktree not found")
+                            .font(.headline)
+                        Text(worktreePath)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                    }
+                    .padding()
+                }
+            case .completeWorktree(let worktreePath):
+                if let worktree = worktreeLookup(worktreePath) {
+                    CompleteWorktreeSheet(
+                        worktree: worktree,
+                        statusCell: workspace.statusCell(for: worktree.path)
+                    )
+                } else {
+                    VStack(spacing: 8) {
+                        Text("Worktree not found")
+                            .font(.headline)
+                        Text(worktreePath)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                    }
+                    .padding()
+                }
+            case .help:
+                HelpView()
+            }
+        }
+    }
 }
 
 #Preview {
-    ContentView()
-        .environmentObject(AppStore.makeDefault())
+    let root = RootComponent.makeDefault(loadOnInit: false)
+    return ContentView()
+        .environmentObject(root)
+        .environmentObject(root.workspace)
+        .environmentObject(root.activityCenter)
+}
+
+private struct AlertState {
+    let title: String
+    let message: String
 }

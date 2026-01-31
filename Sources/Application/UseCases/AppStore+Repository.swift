@@ -3,32 +3,27 @@ import Foundation
 // MARK: - Repository Use Cases
 
 extension AppStore {
-    func loadRepositories() async {
+    func loadRepositories() async throws {
         repositories = preferences.loadRepositories()
         // Auto-select first repository
         if selectedRepository == nil, let first = repositories.first {
-            await selectRepository(first)
+            try await selectRepository(first)
         }
     }
 
-    func addRepository(at path: String) async {
-        do {
-            let rootPath = try await runIO { try self.git.getRepositoryRoot(at: path) }
+    func addRepository(at path: String) async throws {
+        let rootPath = try await runIO { try self.git.getRepositoryRoot(at: path) }
 
-            // Check if already added
-            guard !repositories.contains(where: { $0.path == rootPath }) else {
-                showError(message: "Repository already added")
-                return
-            }
-
-            let repo = Repository(path: rootPath)
-            repositories.append(repo)
-            preferences.saveRepositories(repositories)
-
-            await selectRepository(repo)
-        } catch {
-            showError(message: error.localizedDescription)
+        // Check if already added
+        guard !repositories.contains(where: { $0.path == rootPath }) else {
+            throw AppStoreError.repositoryAlreadyAdded
         }
+
+        let repo = Repository(path: rootPath)
+        repositories.append(repo)
+        preferences.saveRepositories(repositories)
+
+        try await selectRepository(repo)
     }
 
     func removeRepository(_ repo: Repository) async {
@@ -37,7 +32,7 @@ extension AppStore {
 
         if selectedRepository?.id == repo.id {
             if let selected = repositories.first {
-                await selectRepository(selected)
+                try? await selectRepository(selected)
             } else {
                 selectedRepository = nil
                 worktrees = []
@@ -46,9 +41,9 @@ extension AppStore {
         }
     }
 
-    func selectRepository(_ repo: Repository) async {
+    func selectRepository(_ repo: Repository) async throws {
         selectedRepository = repo
-        await refreshWorktrees(for: repo)
+        try await refreshWorktrees(for: repo)
         await loadBranches(for: repo)
     }
 

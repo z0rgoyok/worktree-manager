@@ -1,21 +1,21 @@
 import SwiftUI
 
 struct RepositorySidebar: View {
-    @EnvironmentObject var store: AppStore
-    @State private var showAddRepo = false
+    @EnvironmentObject var root: RootComponent
+    @EnvironmentObject var workspace: WorkspaceComponent
     @State private var repositoryForCopySettings: Repository?
 
     var body: some View {
         List(selection: Binding(
-            get: { store.selectedRepository },
+            get: { workspace.state.selectedRepository },
             set: { repo in
-                if let repo = repo {
-                    Task { await store.selectRepository(repo) }
+                if let repo {
+                    workspace.send(.setSidebarSelection(.repository(repo)), root: root)
                 }
             }
         )) {
             Section("Repositories") {
-                ForEach(store.repositories) { repo in
+                ForEach(workspace.state.repositories) { repo in
                     RepositoryRow(repository: repo)
                         .tag(repo)
                         .contextMenu {
@@ -39,7 +39,7 @@ struct RepositorySidebar: View {
                             Divider()
 
                             Button("Remove from List", role: .destructive) {
-                                Task { await store.removeRepository(repo) }
+                                Task { await workspace.removeRepository(repo) }
                             }
                         }
                 }
@@ -50,22 +50,22 @@ struct RepositorySidebar: View {
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button {
-                    showAddRepo = true
+                    root.send(.presentSheet(.addRepository))
                 } label: {
                     Label("Add Repository", systemImage: "plus")
                 }
             }
         }
-        .sheet(isPresented: $showAddRepo) {
-            AddRepositorySheet()
-        }
         .sheet(item: $repositoryForCopySettings) { repo in
-            RepositoryCopyPatternsSheet(repository: repo, store: store)
+            RepositoryCopyPatternsSheet(repository: repo)
         }
     }
 }
 
 #Preview {
-    RepositorySidebar()
-        .environmentObject(AppStore.makeDefault())
+    let root = RootComponent.makeDefault(loadOnInit: false)
+    return RepositorySidebar()
+        .environmentObject(root)
+        .environmentObject(root.workspace)
+        .environmentObject(root.settings)
 }

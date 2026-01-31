@@ -2,7 +2,6 @@ import SwiftUI
 
 /// Header showing worktree details when a worktree is selected (info-only, actions via menu/context menu)
 struct WorktreeDetailHeader: View {
-    @EnvironmentObject var store: AppStore
     let worktree: Worktree
     let repository: Repository
     @ObservedObject var statusCell: WorktreeStatusCell
@@ -89,7 +88,6 @@ struct WorktreeDetailHeader: View {
                 value: WorktreeStatus(isDirty: false, hasRemote: true, ahead: 1, behind: 0, prStatus: nil)
             )
         )
-        .environmentObject(AppStore.makeDefault(loadOnInit: false))
 
         Spacer()
     }

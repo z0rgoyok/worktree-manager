@@ -15,9 +15,6 @@ final class AppStore: ObservableObject {
     @Published var defaultEditorId: String
     @Published var defaultCopyPatterns: [CopyPattern]
     @Published var isLoading = false
-    @Published var error: String?
-    @Published var showError = false
-    @Published var lastCopyResult: CopyResult?
 
     // MARK: - Dependencies (internal for extensions)
 
@@ -87,22 +84,10 @@ final class AppStore: ObservableObject {
                 guard selectedRepository != nil else { return }
                 let token = self.activityCenter.beginGlobal(kind: .initialLoad, message: "Loading workspace…")
                 defer { self.activityCenter.end(token) }
-                await refreshWorktrees()
+                try? await refreshWorktrees()
                 await loadBranches()
             }
         }
-    }
-
-    // MARK: - Error Handling
-
-    func showError(message: String) {
-        error = message
-        showError = true
-    }
-
-    func clearError() {
-        error = nil
-        showError = false
     }
 
     // MARK: - Internal Helpers
@@ -160,7 +145,7 @@ final class AppStore: ObservableObject {
     private func handleFileSystemChange(_ changedPaths: Set<String>) async {
         guard let repo = selectedRepository else { return }
         guard !changedPaths.isEmpty else {
-            await refreshWorktrees(for: repo)
+            try? await refreshWorktrees(for: repo)
             return
         }
 
@@ -185,7 +170,7 @@ final class AppStore: ObservableObject {
 
             // If we see a worktree name we don't recognize (created/removed externally), refresh the list once.
             if hasUnknown || gitWorktreeChanges.contains(gitWorktreesPath) {
-                await refreshWorktrees(for: repo)
+                try? await refreshWorktrees(for: repo)
                 return
             }
 

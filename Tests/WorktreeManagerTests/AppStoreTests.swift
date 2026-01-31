@@ -3,7 +3,7 @@ import XCTest
 
 final class AppStoreTests: XCTestCase {
     @MainActor
-    func test_loadRepositories_autoSelectsFirst_andLoadsBranchesAndWorktrees() async {
+    func test_loadRepositories_autoSelectsFirst_andLoadsBranchesAndWorktrees() async throws {
         let repo = Repository(path: "/repo")
         let preferences = InMemoryPreferencesStore(
             repositories: [repo],
@@ -35,7 +35,7 @@ final class AppStoreTests: XCTestCase {
             loadOnInit: false
         )
 
-        await store.loadRepositories()
+        try await store.loadRepositories()
 
         XCTAssertEqual(store.repositories, [repo])
         XCTAssertEqual(store.selectedRepository, repo)
@@ -45,7 +45,7 @@ final class AppStoreTests: XCTestCase {
     }
 
     @MainActor
-    func test_addRepository_savesAndSelects() async {
+    func test_addRepository_savesAndSelects() async throws {
         let preferences = InMemoryPreferencesStore(worktreeBasePath: "/worktrees")
         let git = FakeGitClient()
         git.getRepositoryRootHandler = { path in
@@ -65,7 +65,7 @@ final class AppStoreTests: XCTestCase {
             loadOnInit: false
         )
 
-        await store.addRepository(at: "/repo/subdir")
+        try await store.addRepository(at: "/repo/subdir")
 
         XCTAssertEqual(store.repositories.map(\.path), ["/repo"])
         XCTAssertEqual(preferences.repositories.map(\.path), ["/repo"])
@@ -91,15 +91,20 @@ final class AppStoreTests: XCTestCase {
 
         store.repositories = [Repository(path: "/repo")]
 
-        await store.addRepository(at: "/repo")
-
-        XCTAssertTrue(store.showError)
+        do {
+            try await store.addRepository(at: "/repo")
+            XCTFail("Expected addRepository to throw for duplicate repo")
+        } catch let error as AppStoreError {
+            XCTAssertEqual(error, .repositoryAlreadyAdded)
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
         XCTAssertEqual(store.repositories.count, 1)
         XCTAssertEqual(preferences.saveRepositoriesCalls.count, 0)
     }
 
     @MainActor
-    func test_createWorktree_buildsPath_createsDirectory_andCallsGit() async {
+    func test_createWorktree_buildsPath_createsDirectory_andCallsGit() async throws {
         let repo = Repository(path: "/repo", name: "repo")
         let preferences = InMemoryPreferencesStore(worktreeBasePath: "/worktrees")
         let git = FakeGitClient()
@@ -119,7 +124,7 @@ final class AppStoreTests: XCTestCase {
         )
         store.selectedRepository = repo
 
-        await store.createWorktree(
+        try await store.createWorktree(
             name: "feature-1",
             branch: "feature-1",
             createNewBranch: true,
@@ -152,13 +157,18 @@ final class AppStoreTests: XCTestCase {
         )
         store.selectedRepository = repo
 
-        await store.removeWorktree(Worktree(path: "/repo", branch: "main", isMain: true))
-
-        XCTAssertTrue(store.showError)
+        do {
+            try await store.removeWorktree(Worktree(path: "/repo", branch: "main", isMain: true))
+            XCTFail("Expected removeWorktree to throw for main worktree")
+        } catch let error as AppStoreError {
+            XCTAssertEqual(error, .cannotRemoveMainWorktree)
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
     }
 
     @MainActor
-    func test_removeWorktree_deletesBranchWhenRequested() async {
+    func test_removeWorktree_deletesBranchWhenRequested() async throws {
         let repo = Repository(path: "/repo")
         let preferences = InMemoryPreferencesStore(worktreeBasePath: "/worktrees")
         let git = FakeGitClient()
@@ -178,7 +188,7 @@ final class AppStoreTests: XCTestCase {
 
         let worktree = Worktree(path: "/worktrees/repo/feature", branch: "feature", isMain: false)
 
-        await store.removeWorktree(worktree, force: true, deleteBranch: true)
+        try await store.removeWorktree(worktree, force: true, deleteBranch: true)
 
         XCTAssertEqual(git.removeWorktreeCalls, [
             FakeGitClient.RemoveWorktreeCall(repoPath: "/repo", worktreePath: "/worktrees/repo/feature", force: true)
@@ -189,7 +199,7 @@ final class AppStoreTests: XCTestCase {
     }
 
     @MainActor
-    func test_lockUnlockAndPrune_delegateToGit() async {
+    func test_lockUnlockAndPrune_delegateToGit() async throws {
         let repo = Repository(path: "/repo")
         let worktree = Worktree(path: "/worktrees/repo/feature", branch: "feature")
 
@@ -216,9 +226,9 @@ final class AppStoreTests: XCTestCase {
         )
         store.selectedRepository = repo
 
-        await store.lockWorktree(worktree)
-        await store.unlockWorktree(worktree)
-        await store.pruneWorktrees()
+        try await store.lockWorktree(worktree)
+        try await store.unlockWorktree(worktree)
+        try await store.pruneWorktrees()
 
         XCTAssertEqual(locked?.0, "/repo")
         XCTAssertEqual(locked?.1, "/worktrees/repo/feature")
@@ -228,7 +238,7 @@ final class AppStoreTests: XCTestCase {
     }
 
     @MainActor
-    func test_openingActions_delegateToPorts() {
+    func test_openingActions_delegateToPorts() throws {
         let editorOpener = SpyEditorOpener()
         let system = SpySystemOpener()
         let store = AppStore(
@@ -244,7 +254,7 @@ final class AppStoreTests: XCTestCase {
         let worktree = Worktree(path: "/wt/feature", branch: "feature")
         let editor = Editor(id: "vscode", name: "VS Code", command: "code", icon: "x")
 
-        store.openInEditor(worktree, editor: editor)
+        try store.openInEditor(worktree, editor: editor)
         store.openInFinder(worktree)
         store.openInTerminal(worktree)
 
@@ -283,7 +293,7 @@ final class AppStoreTests: XCTestCase {
     }
 
     @MainActor
-    func test_push_setsUpstreamWhenNoRemote() async {
+    func test_push_setsUpstreamWhenNoRemote() async throws {
         let git = FakeGitClient()
         git.getWorktreeStatusHandler = { _ in
             WorktreeStatus(isDirty: false, hasRemote: false, ahead: 1, behind: 0, prStatus: nil)
@@ -300,7 +310,7 @@ final class AppStoreTests: XCTestCase {
         )
 
         let worktree = Worktree(path: "/wt/feature", branch: "feature")
-        await store.push(worktree)
+        try await store.push(worktree)
 
         XCTAssertEqual(git.pushCalls, [
             FakeGitClient.PushCall(worktreePath: "/wt/feature", setUpstream: true)
@@ -308,7 +318,7 @@ final class AppStoreTests: XCTestCase {
     }
 
     @MainActor
-    func test_createPR_pushesWhenNeeded_thenOpensURL() async {
+    func test_createPR_pushesWhenNeeded_thenOpensURL() async throws {
         let git = FakeGitClient()
         git.getWorktreeStatusHandler = { _ in
             WorktreeStatus(isDirty: false, hasRemote: true, ahead: 1, behind: 0, prStatus: nil)
@@ -332,24 +342,24 @@ final class AppStoreTests: XCTestCase {
         )
 
         let worktree = Worktree(path: "/wt/feature", branch: "feature")
-        await store.createPR(worktree, title: "Feature PR", body: "Body", baseBranch: "main")
+        let url = try await store.createPR(worktree, title: "Feature PR", body: "Body", baseBranch: "main")
 
         XCTAssertEqual(git.pushCalls, [
             FakeGitClient.PushCall(worktreePath: "/wt/feature", setUpstream: false)
         ])
-        XCTAssertEqual(system.openedURLs, [URL(string: "https://example.test/pr/123")!])
+        XCTAssertEqual(url, URL(string: "https://example.test/pr/123")!)
+        XCTAssertEqual(system.openedURLs, [])
     }
 
     @MainActor
     func test_openPR_opensURLWhenPresent() {
-        let system = SpySystemOpener()
         let store = AppStore(
             git: FakeGitClient(),
             preferences: InMemoryPreferencesStore(),
             editorOpener: SpyEditorOpener(),
             fileSystemWatcher: SpyFileSystemWatcher(),
             fileSystem: FakeFileSystem(),
-            system: system,
+            system: SpySystemOpener(),
             loadOnInit: false
         )
 
@@ -362,13 +372,11 @@ final class AppStoreTests: XCTestCase {
             prStatus: PRStatus(number: 1, state: "OPEN", url: "https://example.test/pr/1", title: nil)
         ), forWorktreePath: worktree.path)
 
-        store.openPR(worktree)
-
-        XCTAssertEqual(system.openedURLs, [URL(string: "https://example.test/pr/1")!])
+        XCTAssertEqual(store.openPRURL(worktree), URL(string: "https://example.test/pr/1")!)
     }
 
     @MainActor
-    func test_mergeBranch_delegatesToGit_andRefreshesWorktrees() async {
+    func test_mergeBranch_delegatesToGit_andRefreshesWorktrees() async throws {
         let repo = Repository(path: "/repo")
         let git = FakeGitClient()
         git.listWorktreesHandler = { _ in [] }
@@ -385,7 +393,7 @@ final class AppStoreTests: XCTestCase {
         )
         store.selectedRepository = repo
 
-        await store.mergeBranch(Worktree(path: "/wt/feature", branch: "feature"), into: "main")
+        try await store.mergeBranch(Worktree(path: "/wt/feature", branch: "feature"), into: "main")
 
         XCTAssertEqual(git.mergedBranches.count, 1)
         XCTAssertEqual(git.mergedBranches.first?.repoPath, "/repo")

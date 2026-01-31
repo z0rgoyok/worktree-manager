@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct AddRepositorySheet: View {
-    @EnvironmentObject var store: AppStore
+    @EnvironmentObject var workspace: WorkspaceComponent
     @Environment(\.dismiss) var dismiss
     @State private var path = ""
 
@@ -28,7 +28,7 @@ struct AddRepositorySheet: View {
                 Spacer()
 
                 Button("Add") {
-                    Task { await store.addRepository(at: path) }
+                    Task { await workspace.addRepository(at: path) }
                     dismiss()
                 }
                 .keyboardShortcut(.defaultAction)
@@ -51,4 +51,3 @@ struct AddRepositorySheet: View {
         }
     }
 }
-
