@@ -31,32 +31,35 @@ struct KanbanBoard: View {
 
             // Columns
             if selection != nil {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(alignment: .top, spacing: DS.Spacing.md) {
-                        ForEach(KanbanColumnType.allCases) { columnType in
-                            KanbanColumn(
-                                type: columnType,
-                                tasks: tasks(for: columnType),
-                                draggedTask: $draggedTask,
-                                onAddTask: {
-                                    addTaskColumn = columnType
-                                    showAddTask = true
-                                },
-                                onMoveTask: { task, newColumn in
-                                    moveTask(task, to: newColumn)
-                                },
-                                onDeleteTask: { task in
-                                    deleteTask(task)
-                                },
-                                onReorderTask: { task, newIndex in
-                                    reorderTask(task, to: newIndex)
-                                }
-                            )
+                GeometryReader { geometry in
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(alignment: .top, spacing: DS.Spacing.md) {
+                            ForEach(KanbanColumnType.allCases) { columnType in
+                                KanbanColumn(
+                                    type: columnType,
+                                    tasks: tasks(for: columnType),
+                                    draggedTask: $draggedTask,
+                                    onAddTask: {
+                                        addTaskColumn = columnType
+                                        showAddTask = true
+                                    },
+                                    onMoveTask: { task, newColumn in
+                                        moveTask(task, to: newColumn)
+                                    },
+                                    onDeleteTask: { task in
+                                        deleteTask(task)
+                                    },
+                                    onReorderTask: { task, newIndex in
+                                        reorderTask(task, to: newIndex)
+                                    }
+                                )
+                            }
                         }
+                        .padding(DS.Spacing.lg)
+                        .frame(minWidth: geometry.size.width, alignment: .topLeading)
                     }
-                    .padding(DS.Spacing.lg)
+                    .background(DS.Colors.surfaceTertiary)
                 }
-                .background(DS.Colors.surfaceTertiary)
             } else {
                 KanbanEmptyState()
             }

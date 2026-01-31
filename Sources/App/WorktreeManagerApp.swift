@@ -9,14 +9,21 @@ struct WorktreeManagerApp: App {
             ContentView()
                 .environmentObject(store)
         }
-        .windowStyle(.hiddenTitleBar)
-        .windowResizability(.contentSize)
+        .windowStyle(.titleBar)
+        .windowToolbarStyle(.unified(showsTitle: true))
         .commands {
-            CommandGroup(replacing: .newItem) {
-                Button("Add Repository...") {
-                    NSApp.sendAction(#selector(AppCommands.addRepository), to: nil, from: nil)
+            WorktreeCommands(store: store)
+
+            CommandGroup(replacing: .newItem) {}
+
+            CommandGroup(after: .sidebar) {
+                Button("Toggle Sidebar") {
+                    NSApp.keyWindow?.firstResponder?.tryToPerform(
+                        #selector(NSSplitViewController.toggleSidebar(_:)),
+                        with: nil
+                    )
                 }
-                .keyboardShortcut("o", modifiers: .command)
+                .keyboardShortcut("s", modifiers: [.command, .control])
             }
         }
 
@@ -25,8 +32,4 @@ struct WorktreeManagerApp: App {
                 .environmentObject(store)
         }
     }
-}
-
-@objc protocol AppCommands {
-    func addRepository()
 }

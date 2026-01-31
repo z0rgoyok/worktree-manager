@@ -241,6 +241,7 @@ struct ProjectTreeNode: View {
                         .lineLimit(1)
                         .truncationMode(.middle)
                 }
+                .help(repository.path)
 
                 Spacer()
 
@@ -381,7 +382,7 @@ struct WorktreeTreeRow: View {
                         .lineLimit(1)
 
                     if worktree.isMain {
-                        StatusBadge(text: "main", color: .blue)
+                        StatusBadge(text: worktree.branch, color: .blue)
                     }
 
                     if worktree.isLocked {
@@ -403,6 +404,7 @@ struct WorktreeTreeRow: View {
                     }
                 }
             }
+            .help(worktree.path)
 
             Spacer()
         }
@@ -421,24 +423,78 @@ struct WorktreeTreeRow: View {
             selection = .worktree(worktree, inRepository: repository)
         }
         .contextMenu {
-            Button("Open in Finder") {
-                store.openInFinder(worktree)
-            }
+            // Open actions
+            Section {
+                Button("Open in Editor") {
+                    store.openInEditor(worktree)
+                }
 
-            Button("Open in Terminal") {
-                store.openInTerminal(worktree)
-            }
-
-            if !worktree.isMain {
-                Divider()
-
-                if worktree.isLocked {
-                    Button("Unlock") {
-                        Task { await store.unlockWorktree(worktree) }
+                Menu("Open in...") {
+                    ForEach(store.configuredEditors) { editor in
+                        Button(editor.name) {
+                            store.openInEditor(worktree, editor: editor)
+                        }
                     }
-                } else {
-                    Button("Lock") {
-                        Task { await store.lockWorktree(worktree) }
+                }
+            }
+
+            Section {
+                Button("Show in Finder") {
+                    store.openInFinder(worktree)
+                }
+
+                Button("Open in Terminal") {
+                    store.openInTerminal(worktree)
+                }
+
+                Button("Copy Path") {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(worktree.path, forType: .string)
+                }
+            }
+
+            // Git actions (non-main only)
+            if !worktree.isMain {
+                Section {
+                    Button("Push") {
+                        Task { await store.push(worktree) }
+                    }
+
+                    Button("Pull") {
+                        Task { await store.pull(worktree) }
+                    }
+                }
+
+                // PR actions
+                Section {
+                    if let status = status, let pr = status.prStatus {
+                        Button(pr.isMerged ? "View Merged PR" : "View PR #\(pr.number)") {
+                            store.openPR(worktree)
+                        }
+                    } else {
+                        Button("Create Pull Request...") {
+                            store.selectedWorktree = worktree
+                            NotificationCenter.default.post(name: .showCreatePR, object: nil)
+                        }
+                    }
+                }
+
+                Section {
+                    if worktree.isLocked {
+                        Button("Unlock") {
+                            Task { await store.unlockWorktree(worktree) }
+                        }
+                    } else {
+                        Button("Lock") {
+                            Task { await store.lockWorktree(worktree) }
+                        }
+                    }
+                }
+
+                Section {
+                    Button("Finish Worktree...") {
+                        store.selectedWorktree = worktree
+                        NotificationCenter.default.post(name: .showFinishWorktree, object: nil)
                     }
                 }
             }

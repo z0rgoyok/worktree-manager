@@ -66,7 +66,7 @@ struct KanbanCard: View {
                 HStack(spacing: DS.Spacing.xxs) {
                     Image(systemName: "clock")
                         .font(.system(size: 10))
-                    Text(task.createdAt, style: .relative)
+                    Text(relativeTime)
                         .font(.system(size: 10))
                 }
                 .foregroundStyle(DS.Colors.textTertiary)
@@ -121,6 +121,12 @@ struct KanbanCard: View {
                 onDelete()
             }
         }
+    }
+
+    private var relativeTime: String {
+        let formatter = RelativeDateTimeFormatter()
+        formatter.unitsStyle = .abbreviated
+        return formatter.localizedString(for: task.createdAt, relativeTo: Date())
     }
 }
 

@@ -3,50 +3,94 @@ import SwiftUI
 struct ContentView: View {
     @EnvironmentObject var store: AppStore
     @State private var showAddWorktree = false
+    @State private var showAddRepository = false
+    @State private var showCreatePR = false
+    @State private var showFinishWorktree = false
     @State private var showHelp = false
     @State private var sidebarSelection: SidebarSelection?
-    @State private var sidebarWidth: CGFloat = DS.Sizes.sidebarIdealWidth
 
     var body: some View {
-        HSplitView {
-            // Left: Project tree sidebar
+        NavigationSplitView {
             ProjectTreeSidebar(selection: $sidebarSelection)
-                .frame(minWidth: DS.Sizes.sidebarMinWidth, maxWidth: DS.Sizes.sidebarMaxWidth)
-
-            // Right: Kanban board
+                .frame(minWidth: DS.Sizes.sidebarMinWidth)
+                .navigationSplitViewColumnWidth(
+                    min: DS.Sizes.sidebarMinWidth,
+                    ideal: DS.Sizes.sidebarIdealWidth,
+                    max: DS.Sizes.sidebarMaxWidth
+                )
+        } detail: {
             KanbanBoard(selection: sidebarSelection)
                 .frame(minWidth: 600)
         }
         .frame(minWidth: 900, minHeight: 550)
+        .navigationTitle(navigationTitle)
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
+                if store.selectedRepository != nil {
+                    // New Worktree
+                    Button {
+                        showAddWorktree = true
+                    } label: {
+                        Label("New Worktree", systemImage: "plus.square.on.square")
+                    }
+                    .help("New Worktree... (⌘N)")
+
+                    // Open actions
+                    if store.selectedWorktree != nil {
+                        Button {
+                            if let wt = store.selectedWorktree {
+                                store.openInFinder(wt)
+                            }
+                        } label: {
+                            Label("Finder", systemImage: "folder")
+                        }
+                        .help("Show in Finder (⇧⌘F)")
+
+                        Button {
+                            if let wt = store.selectedWorktree {
+                                store.openInTerminal(wt)
+                            }
+                        } label: {
+                            Label("Terminal", systemImage: "terminal")
+                        }
+                        .help("Open in Terminal (⇧⌘T)")
+                    }
+
+                    // Refresh
+                    Button {
+                        Task { await store.refreshWorktrees() }
+                    } label: {
+                        Label("Refresh", systemImage: "arrow.clockwise")
+                    }
+                    .help("Refresh (⌘R)")
+                }
+            }
+
+            ToolbarItemGroup(placement: .secondaryAction) {
                 Button {
                     showHelp = true
                 } label: {
                     Label("Help", systemImage: "questionmark.circle")
                 }
                 .help("Show help")
-
-                if store.selectedRepository != nil {
-                    Button {
-                        showAddWorktree = true
-                    } label: {
-                        Label("New Worktree", systemImage: "plus.square.on.square")
-                    }
-                    .help("Create new worktree")
-
-                    Button {
-                        Task { await store.refreshWorktrees() }
-                    } label: {
-                        Label("Refresh", systemImage: "arrow.clockwise")
-                    }
-                    .help("Refresh worktree list")
-                    .keyboardShortcut("r", modifiers: .command)
-                }
             }
         }
+        // Sheets
         .sheet(isPresented: $showAddWorktree) {
             AddWorktreeSheet()
+        }
+        .sheet(isPresented: $showAddRepository) {
+            AddRepositorySheet()
+        }
+        .sheet(isPresented: $showCreatePR) {
+            if let worktree = store.selectedWorktree {
+                CreatePRSheet(worktree: worktree)
+            }
+        }
+        .sheet(isPresented: $showFinishWorktree) {
+            if let worktree = store.selectedWorktree {
+                CompleteWorktreeSheet(worktree: worktree)
+            }
         }
         .sheet(isPresented: $showHelp) {
             HelpView()
@@ -58,22 +102,51 @@ struct ContentView: View {
         } message: {
             Text(store.error ?? "Unknown error")
         }
+        // Sync selection with store
         .onChange(of: sidebarSelection) { _, newSelection in
-            // Sync selection with store
             if let selection = newSelection {
                 Task {
                     if store.selectedRepository?.id != selection.repository.id {
                         await store.selectRepository(selection.repository)
                     }
+                    // Sync selected worktree
+                    if case .worktree(let wt, _) = selection {
+                        store.selectedWorktree = wt
+                    } else {
+                        store.selectedWorktree = nil
+                    }
                 }
+            } else {
+                store.selectedWorktree = nil
             }
         }
         .onAppear {
-            // Initialize selection from store
             if let repo = store.selectedRepository {
                 sidebarSelection = .repository(repo)
             }
         }
+        // Handle notifications from menu commands
+        .onReceive(NotificationCenter.default.publisher(for: .showAddWorktree)) { _ in
+            showAddWorktree = true
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .showAddRepository)) { _ in
+            showAddRepository = true
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .showCreatePR)) { _ in
+            showCreatePR = true
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .showFinishWorktree)) { _ in
+            showFinishWorktree = true
+        }
+    }
+
+    private var navigationTitle: String {
+        if let worktree = store.selectedWorktree {
+            return worktree.name
+        } else if let repo = store.selectedRepository {
+            return repo.name
+        }
+        return "Worktree Manager"
     }
 }
 

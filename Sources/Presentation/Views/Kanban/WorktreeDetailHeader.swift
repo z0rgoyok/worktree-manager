@@ -1,14 +1,10 @@
 import SwiftUI
 
-/// Header showing worktree details and actions when a worktree is selected
+/// Header showing worktree details when a worktree is selected (info-only, actions via menu/context menu)
 struct WorktreeDetailHeader: View {
     @EnvironmentObject var store: AppStore
     let worktree: Worktree
     let repository: Repository
-
-    @State private var showEditorPicker = false
-    @State private var showCreatePR = false
-    @State private var showFinishSheet = false
 
     private var status: WorktreeStatus? {
         store.getStatus(for: worktree)
@@ -16,7 +12,7 @@ struct WorktreeDetailHeader: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack(alignment: .top, spacing: DS.Spacing.lg) {
+            HStack(alignment: .center, spacing: DS.Spacing.lg) {
                 // Left: Info
                 VStack(alignment: .leading, spacing: DS.Spacing.sm) {
                     // Name + badges
@@ -71,31 +67,11 @@ struct WorktreeDetailHeader: View {
                 }
 
                 Spacer()
-
-                // Right: Actions
-                if !worktree.isPrunable {
-                    WorktreeActions(
-                        worktree: worktree,
-                        status: status,
-                        showEditorPicker: $showEditorPicker,
-                        showCreatePR: $showCreatePR,
-                        showFinishSheet: $showFinishSheet
-                    )
-                }
             }
             .padding(DS.Spacing.lg)
             .background(.bar)
 
             Divider()
-        }
-        .sheet(isPresented: $showEditorPicker) {
-            EditorPickerSheet(worktree: worktree)
-        }
-        .sheet(isPresented: $showCreatePR) {
-            CreatePRSheet(worktree: worktree)
-        }
-        .sheet(isPresented: $showFinishSheet) {
-            CompleteWorktreeSheet(worktree: worktree)
         }
     }
 }
@@ -168,153 +144,6 @@ struct WorktreePRBadge: View {
     }
 }
 
-// MARK: - Worktree Actions
-
-struct WorktreeActions: View {
-    @EnvironmentObject var store: AppStore
-    let worktree: Worktree
-    let status: WorktreeStatus?
-
-    @Binding var showEditorPicker: Bool
-    @Binding var showCreatePR: Bool
-    @Binding var showFinishSheet: Bool
-
-    var body: some View {
-        HStack(spacing: DS.Spacing.sm) {
-            if !worktree.isMain {
-                // Push button
-                Button {
-                    Task { await store.push(worktree) }
-                } label: {
-                    Label("Push", systemImage: "arrow.up")
-                }
-                .buttonStyle(.bordered)
-                .disabled(status?.ahead == 0 && status?.hasRemote == true)
-                .help("Push commits to remote")
-
-                // PR button
-                if let status = status, let pr = status.prStatus {
-                    Button {
-                        store.openPR(worktree)
-                    } label: {
-                        Label(pr.isMerged ? "Merged" : "PR #\(pr.number)", systemImage: "arrow.triangle.pull")
-                    }
-                    .buttonStyle(.bordered)
-                    .tint(pr.isMerged ? .purple : .green)
-                } else {
-                    Button {
-                        showCreatePR = true
-                    } label: {
-                        Label("Create PR", systemImage: "arrow.triangle.pull")
-                    }
-                    .buttonStyle(.bordered)
-                }
-
-                // Finish button (when PR is merged)
-                if status?.prStatus?.isMerged == true {
-                    Button {
-                        showFinishSheet = true
-                    } label: {
-                        Label("Finish", systemImage: "checkmark.circle")
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .tint(.green)
-                }
-            }
-
-            // Open button
-            Button {
-                showEditorPicker = true
-            } label: {
-                Label("Open", systemImage: "arrow.up.forward.app")
-            }
-            .buttonStyle(.borderedProminent)
-
-            // More menu
-            WorktreeMoreMenu(
-                worktree: worktree,
-                status: status,
-                showFinishSheet: $showFinishSheet
-            )
-        }
-    }
-}
-
-// MARK: - More Menu
-
-struct WorktreeMoreMenu: View {
-    @EnvironmentObject var store: AppStore
-    let worktree: Worktree
-    let status: WorktreeStatus?
-
-    @Binding var showFinishSheet: Bool
-
-    var body: some View {
-        Menu {
-            Section {
-                Button {
-                    store.openInFinder(worktree)
-                } label: {
-                    Label("Show in Finder", systemImage: "folder")
-                }
-
-                Button {
-                    store.openInTerminal(worktree)
-                } label: {
-                    Label("Open in Terminal", systemImage: "terminal")
-                }
-            }
-
-            Section {
-                Button {
-                    Task { await store.refreshWorktreeStatus(worktree) }
-                } label: {
-                    Label("Refresh Status", systemImage: "arrow.clockwise")
-                }
-
-                if let pr = status?.prStatus {
-                    Button {
-                        store.openPR(worktree)
-                    } label: {
-                        Label("View PR #\(pr.number)", systemImage: "safari")
-                    }
-                }
-            }
-
-            if !worktree.isMain {
-                Section {
-                    if worktree.isLocked {
-                        Button {
-                            Task { await store.unlockWorktree(worktree) }
-                        } label: {
-                            Label("Unlock", systemImage: "lock.open")
-                        }
-                    } else {
-                        Button {
-                            Task { await store.lockWorktree(worktree) }
-                        } label: {
-                            Label("Lock", systemImage: "lock")
-                        }
-                    }
-                }
-
-                Section {
-                    Button {
-                        showFinishSheet = true
-                    } label: {
-                        Label("Complete Worktree...", systemImage: "checkmark.circle")
-                    }
-                }
-            }
-        } label: {
-            Image(systemName: "ellipsis.circle")
-                .font(.body)
-        }
-        .menuStyle(.borderlessButton)
-        .frame(width: 28)
-    }
-}
-
 // MARK: - Repository Header (when project is selected)
 
 struct RepositoryDetailHeader: View {
@@ -349,13 +178,6 @@ struct RepositoryDetailHeader: View {
                 }
 
                 Spacer()
-
-                Button {
-                    NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: repository.path)
-                } label: {
-                    Label("Show in Finder", systemImage: "folder")
-                }
-                .buttonStyle(.bordered)
             }
             .padding(DS.Spacing.lg)
             .background(.bar)

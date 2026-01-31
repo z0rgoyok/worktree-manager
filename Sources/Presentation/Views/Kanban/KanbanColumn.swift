@@ -89,7 +89,7 @@ struct KanbanColumn: View {
                 .padding(DS.Spacing.sm)
             }
         }
-        .frame(width: DS.Sizes.columnIdealWidth)
+        .frame(minWidth: DS.Sizes.columnMinWidth, maxWidth: .infinity)
         .columnStyle()
         .dropTargetStyle(isTargeted: isTargeted && draggedTask != nil)
         .onDrop(
