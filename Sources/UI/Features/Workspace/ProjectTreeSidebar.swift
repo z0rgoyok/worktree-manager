@@ -94,18 +94,55 @@ struct ProjectTreeSidebar: View {
 
             Spacer()
 
-            Button {
+            HeaderIconButton(
+                systemImage: shouldCollapseAllRepositories ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right",
+                help: shouldCollapseAllRepositories ? "Collapse All Projects" : "Expand All Projects",
+                isDisabled: workspace.state.repositories.isEmpty,
+                action: toggleAllRepositoriesExpansion
+            )
+
+            HeaderIconButton(
+                systemImage: "plus",
+                help: "Add Repository",
+                isDisabled: false
+            ) {
                 root.send(.presentSheet(.addRepository))
-            } label: {
-                Image(systemName: "plus")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(DS.Colors.textSecondary)
             }
-            .buttonStyle(.plain)
-            .help("Add Repository")
         }
         .padding(.horizontal, DS.Spacing.md)
         .padding(.vertical, DS.Spacing.sm)
+    }
+
+    private struct HeaderIconButton: View {
+        let systemImage: String
+        let help: String
+        let isDisabled: Bool
+        let action: () -> Void
+
+        @State private var isHovered = false
+
+        var body: some View {
+            Button {
+                action()
+            } label: {
+                Image(systemName: systemImage)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(DS.Colors.textSecondary)
+                    .frame(width: 24, height: 24)
+                    .background(isHovered && !isDisabled ? DS.Colors.surfaceSecondary : Color.clear)
+                    .cornerRadius(DS.Radius.sm)
+            }
+            .buttonStyle(.plain)
+            .disabled(isDisabled)
+            .help(help)
+            .onHover { isHovered = $0 }
+        }
+    }
+
+    private var shouldCollapseAllRepositories: Bool {
+        let repos = workspace.state.repositories
+        guard !repos.isEmpty else { return false }
+        return expandedRepositories.count == repos.count
     }
 
     private var emptyState: some View {
@@ -266,6 +303,21 @@ struct ProjectTreeSidebar: View {
             guard let repo = workspace.state.repositories.first(where: { $0.id == id }) else { continue }
             loadWorktrees(for: repo)
         }
+    }
+
+    private func toggleAllRepositoriesExpansion() {
+        pendingExpandedRepositoryIds.removeAll()
+
+        withAnimation(DS.Animation.quick) {
+            if shouldCollapseAllRepositories {
+                expandedRepositories.removeAll()
+                return
+            }
+
+            expandedRepositories = Set(workspace.state.repositories.map(\.id))
+        }
+
+        ensureWorktreesLoadedForExpandedRepositories()
     }
 }
 
