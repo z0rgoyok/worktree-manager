@@ -100,7 +100,7 @@ struct RepositoryCopyPatternsSheet: View {
 #Preview {
     RepositoryCopyPatternsSheet(
         repository: Repository(path: "/path/to/repo", name: "my-repo"),
-        store: AppStore()
+        store: AppStore.makeDefault()
     )
-    .environmentObject(AppStore())
+    .environmentObject(AppStore.makeDefault())
 }

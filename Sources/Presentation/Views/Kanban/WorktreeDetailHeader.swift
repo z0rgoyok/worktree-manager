@@ -379,7 +379,7 @@ struct RepositoryDetailHeader: View {
             ),
             repository: Repository(path: "/Users/test/repo")
         )
-        .environmentObject(AppStore(loadOnInit: false))
+        .environmentObject(AppStore.makeDefault(loadOnInit: false))
 
         Spacer()
     }

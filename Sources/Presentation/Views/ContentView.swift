@@ -98,5 +98,5 @@ struct EmptyStateView: View {
 
 #Preview {
     ContentView()
-        .environmentObject(AppStore())
+        .environmentObject(AppStore.makeDefault())
 }
