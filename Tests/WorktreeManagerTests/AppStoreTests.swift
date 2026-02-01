@@ -492,4 +492,99 @@ final class AppStoreTests: XCTestCase {
         XCTAssertEqual(store.rememberEditorChoice, true)
         XCTAssertEqual(watcher.updatedPathSets.last, Set(["/new-worktrees"]))
     }
+
+    @MainActor
+    func test_refreshWorktrees_doesNotOverwriteSelectedRepository_whenSelectionChangesMidFlight() async throws {
+        let repo1 = Repository(id: UUID(uuidString: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")!, path: "/repo-1")
+        let repo2 = Repository(id: UUID(uuidString: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")!, path: "/repo-2")
+
+        let preferences = InMemoryPreferencesStore(repositories: [repo1, repo2], worktreeBasePath: "/worktrees")
+        let repo1Started = XCTestExpectation(description: "repo1 listWorktrees started")
+
+        let git = FakeGitClient()
+        git.listWorktreesHandler = { repoPath in
+            if repoPath == repo1.path {
+                repo1Started.fulfill()
+                Thread.sleep(forTimeInterval: 0.2)
+                return [Worktree(path: "/worktrees/repo-1/feature-1", branch: "feature-1")]
+            }
+            if repoPath == repo2.path {
+                return [Worktree(path: "/worktrees/repo-2/feature-2", branch: "feature-2")]
+            }
+            XCTFail("Unexpected repo path: \(repoPath)")
+            return []
+        }
+        git.listBranchesHandler = { _ in [] }
+
+        let store = AppStore(
+            git: git,
+            preferences: preferences,
+            editorOpener: SpyEditorOpener(),
+            fileSystemWatcher: SpyFileSystemWatcher(),
+            fileSystem: FakeFileSystem(existingPaths: ["/worktrees"]),
+            system: SpySystemOpener(),
+            loadOnInit: false
+        )
+
+        store.selectedRepository = repo1
+        let task = Task { try await store.refreshWorktrees(for: repo1) }
+
+        await fulfillment(of: [repo1Started], timeout: 1.0)
+
+        store.selectedRepository = repo2
+        try await store.refreshWorktrees(for: repo2)
+        XCTAssertEqual(store.worktrees.map(\.path), ["/worktrees/repo-2/feature-2"])
+
+        try await task.value
+
+        XCTAssertEqual(store.worktrees.map(\.path), ["/worktrees/repo-2/feature-2"])
+    }
+
+    @MainActor
+    func test_loadBranches_doesNotOverwriteSelectedRepository_whenSelectionChangesMidFlight() async {
+        let repo1 = Repository(id: UUID(uuidString: "cccccccc-cccc-cccc-cccc-cccccccccccc")!, path: "/repo-1")
+        let repo2 = Repository(id: UUID(uuidString: "dddddddd-dddd-dddd-dddd-dddddddddddd")!, path: "/repo-2")
+
+        let preferences = InMemoryPreferencesStore(repositories: [repo1, repo2], worktreeBasePath: "/worktrees")
+
+        let repo1Started = XCTestExpectation(description: "repo1 listBranches started")
+
+        let git = FakeGitClient()
+        git.listWorktreesHandler = { _ in [] }
+        git.listBranchesHandler = { repoPath in
+            if repoPath == repo1.path {
+                repo1Started.fulfill()
+                Thread.sleep(forTimeInterval: 0.2)
+                return ["main-1"]
+            }
+            if repoPath == repo2.path {
+                return ["main-2", "feature-2"]
+            }
+            XCTFail("Unexpected repo path: \(repoPath)")
+            return []
+        }
+
+        let store = AppStore(
+            git: git,
+            preferences: preferences,
+            editorOpener: SpyEditorOpener(),
+            fileSystemWatcher: SpyFileSystemWatcher(),
+            fileSystem: FakeFileSystem(existingPaths: ["/worktrees"]),
+            system: SpySystemOpener(),
+            loadOnInit: false
+        )
+
+        store.selectedRepository = repo1
+        let task = Task { await store.loadBranches(for: repo1) }
+
+        await fulfillment(of: [repo1Started], timeout: 1.0)
+
+        store.selectedRepository = repo2
+        await store.loadBranches(for: repo2)
+        XCTAssertEqual(store.branches, ["main-2", "feature-2"])
+
+        _ = await task.value
+
+        XCTAssertEqual(store.branches, ["main-2", "feature-2"])
+    }
 }

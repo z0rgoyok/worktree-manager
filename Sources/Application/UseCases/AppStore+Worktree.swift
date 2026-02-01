@@ -9,6 +9,9 @@ extension AppStore {
             return
         }
 
+        let requestId = nextRefreshWorktreesRequestToken()
+        let repoId = repo.id
+
         var capturedError: Error?
 
         await withGlobalActivity(kind: .refresh, message: "Refreshing worktrees…") {
@@ -17,6 +20,10 @@ extension AppStore {
 
             do {
                 let listedWorktrees = try await runIO { try self.git.listWorktrees(at: repo.path) }
+                guard !Task.isCancelled else { return }
+                guard isLatestRefreshWorktreesRequestToken(requestId) else { return }
+                guard selectedRepository?.id == repoId else { return }
+
                 let enrichedWorktrees = listedWorktrees.map { worktree in
                     let baseBranch = preferences.worktreeBaseBranch(forWorktreePath: worktree.path)
                     return worktree.withBaseBranch(baseBranch)
@@ -25,15 +32,26 @@ extension AppStore {
                     worktrees = enrichedWorktrees
                 }
             } catch {
-                capturedError = error
+                // Ignore cancellations and stale results to avoid leaking worktrees across repositories.
+                if error is CancellationError || Task.isCancelled { return }
+                guard isLatestRefreshWorktreesRequestToken(requestId) else { return }
+                guard selectedRepository?.id == repoId else { return }
+
                 worktrees = []
+                capturedError = error
             }
+
+            guard !Task.isCancelled else { return }
+            guard isLatestRefreshWorktreesRequestToken(requestId) else { return }
+            guard selectedRepository?.id == repoId else { return }
 
             updateWatchedPaths()
             await refreshAllStatuses()
         }
 
-        if let capturedError {
+        if let capturedError,
+           isLatestRefreshWorktreesRequestToken(requestId),
+           selectedRepository?.id == repoId {
             throw capturedError
         }
     }
@@ -44,10 +62,22 @@ extension AppStore {
             return
         }
 
+        let requestId = nextLoadBranchesRequestToken()
+        let repoId = repo.id
+
         await withGlobalActivity(kind: .refresh, message: "Loading branches…") {
             do {
-                branches = try await runIO { try self.git.listBranches(at: repo.path) }
+                let loadedBranches = try await runIO { try self.git.listBranches(at: repo.path) }
+                guard !Task.isCancelled else { return }
+                guard isLatestLoadBranchesRequestToken(requestId) else { return }
+                guard selectedRepository?.id == repoId else { return }
+
+                branches = loadedBranches
             } catch {
+                if error is CancellationError || Task.isCancelled { return }
+                guard isLatestLoadBranchesRequestToken(requestId) else { return }
+                guard selectedRepository?.id == repoId else { return }
+
                 branches = []
             }
         }

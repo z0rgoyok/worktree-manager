@@ -11,6 +11,8 @@ struct ProjectTreeSidebar: View {
     @State private var repositoryForCopySettings: Repository?
     @State private var worktreesCache: [UUID: [Worktree]] = [:]  // repo.id -> worktrees
     @State private var loadingRepositories: Set<UUID> = []
+    @State private var loadWorktreesRequestIdByRepositoryId: [UUID: UInt64] = [:]
+    @State private var loadWorktreesTaskByRepositoryId: [UUID: Task<Void, Never>] = [:]
     @FocusState private var isKeyboardFocused: Bool
 
     var body: some View {
@@ -41,6 +43,7 @@ struct ProjectTreeSidebar: View {
             }
             .onChange(of: expandedRepositories) { _, expanded in
                 workspace.setExpandedRepositoryIds(expanded)
+                cancelWorktreeLoadsForCollapsedRepositories()
             }
             .onChange(of: workspace.state.repositories) { _, repos in
                 // Drop expansion state for repositories that no longer exist.
@@ -239,6 +242,7 @@ struct ProjectTreeSidebar: View {
                     }
                 } else {
                     expandedRepositories.remove(repo.id)
+                    cancelWorktreeLoad(forRepositoryId: repo.id)
                 }
             }
         )
@@ -254,21 +258,38 @@ struct ProjectTreeSidebar: View {
     }
 
     private func loadWorktrees(for repo: Repository) {
+        guard expandedRepositories.contains(repo.id) else { return }
         guard !loadingRepositories.contains(repo.id) else { return }
+
+        let nextRequestId = (loadWorktreesRequestIdByRepositoryId[repo.id] ?? 0) &+ 1
+        loadWorktreesRequestIdByRepositoryId[repo.id] = nextRequestId
+        let requestId = nextRequestId
 
         loadingRepositories.insert(repo.id)
 
-        Task {
+        let repoId = repo.id
+        let task = Task {
             // Use store's git client to load worktrees without changing selection
-            if workspace.state.selectedRepository?.id == repo.id {
+            if workspace.state.selectedRepository?.id == repoId {
                 // Selected repository: rely on the store's selected worktrees (loaded elsewhere),
                 // and keep a loading placeholder until they arrive.
-                if !workspace.state.worktrees.isEmpty {
+                if workspace.state.worktrees.isEmpty {
                     await MainActor.run {
-                        withAnimation(DS.Animation.quick) {
-                            worktreesCache[repo.id] = workspace.state.worktrees
-                            loadingRepositories.remove(repo.id)
-                        }
+                        guard expandedRepositories.contains(repoId) else { return }
+                        guard loadWorktreesRequestIdByRepositoryId[repoId] == requestId else { return }
+                        loadWorktreesTaskByRepositoryId.removeValue(forKey: repoId)
+                    }
+                    return
+                }
+
+                await MainActor.run {
+                    withAnimation(DS.Animation.quick) {
+                        guard expandedRepositories.contains(repoId) else { return }
+                        guard loadWorktreesRequestIdByRepositoryId[repoId] == requestId else { return }
+
+                        worktreesCache[repoId] = workspace.state.worktrees
+                        loadingRepositories.remove(repoId)
+                        loadWorktreesTaskByRepositoryId.removeValue(forKey: repoId)
                     }
                 }
             } else {
@@ -276,11 +297,32 @@ struct ProjectTreeSidebar: View {
                 let loadedWorktrees = await workspace.loadWorktreesOnly(for: repo)
                 await MainActor.run {
                     withAnimation(DS.Animation.quick) {
-                        worktreesCache[repo.id] = loadedWorktrees
-                        loadingRepositories.remove(repo.id)
+                        guard expandedRepositories.contains(repoId) else { return }
+                        guard loadWorktreesRequestIdByRepositoryId[repoId] == requestId else { return }
+
+                        worktreesCache[repoId] = loadedWorktrees
+                        loadingRepositories.remove(repoId)
+                        loadWorktreesTaskByRepositoryId.removeValue(forKey: repoId)
                     }
                 }
             }
+        }
+
+        loadWorktreesTaskByRepositoryId[repo.id] = task
+    }
+
+    private func cancelWorktreeLoad(forRepositoryId id: UUID) {
+        loadWorktreesRequestIdByRepositoryId[id] = (loadWorktreesRequestIdByRepositoryId[id] ?? 0) &+ 1
+        loadWorktreesTaskByRepositoryId[id]?.cancel()
+        loadWorktreesTaskByRepositoryId.removeValue(forKey: id)
+        loadingRepositories.remove(id)
+    }
+
+    private func cancelWorktreeLoadsForCollapsedRepositories() {
+        let expanded = expandedRepositories
+        let idsToCancel = Set(loadWorktreesTaskByRepositoryId.keys).subtracting(expanded)
+        for id in idsToCancel {
+            cancelWorktreeLoad(forRepositoryId: id)
         }
     }
 

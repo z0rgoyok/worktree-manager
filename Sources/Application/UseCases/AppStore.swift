@@ -36,6 +36,8 @@ final class AppStore: ObservableObject {
 
     private let ioQueue = DispatchQueue(label: "worktree-manager.io", qos: .userInitiated)
     var statusRefreshSuppressionUntilByWorktreePath: [String: Date] = [:]
+    private var refreshWorktreesRequestId: UInt64 = 0
+    private var loadBranchesRequestId: UInt64 = 0
 
     private struct LastSelectionSnapshot: Equatable {
         let repositoryId: UUID?
@@ -146,6 +148,26 @@ final class AppStore: ObservableObject {
         }
 
         fileSystemWatcher.updateWatchedPaths(paths)
+    }
+
+    // MARK: - Request Tokens (avoid stale async writes)
+
+    func nextRefreshWorktreesRequestToken() -> UInt64 {
+        refreshWorktreesRequestId &+= 1
+        return refreshWorktreesRequestId
+    }
+
+    func isLatestRefreshWorktreesRequestToken(_ token: UInt64) -> Bool {
+        token == refreshWorktreesRequestId
+    }
+
+    func nextLoadBranchesRequestToken() -> UInt64 {
+        loadBranchesRequestId &+= 1
+        return loadBranchesRequestId
+    }
+
+    func isLatestLoadBranchesRequestToken(_ token: UInt64) -> Bool {
+        token == loadBranchesRequestId
     }
 
     // MARK: - Private
