@@ -13,6 +13,8 @@ struct ProjectTreeSidebar: View {
     @State private var loadingRepositories: Set<UUID> = []
     @State private var loadWorktreesRequestIdByRepositoryId: [UUID: UInt64] = [:]
     @State private var loadWorktreesTaskByRepositoryId: [UUID: Task<Void, Never>] = [:]
+    @State private var backgroundPrefetchTask: Task<Void, Never>?
+    @State private var backgroundPrefetchRequestId: UInt64 = 0
     @FocusState private var isKeyboardFocused: Bool
 
     var body: some View {
@@ -40,6 +42,7 @@ struct ProjectTreeSidebar: View {
                 restoreExpandedRepositoriesIfNeeded()
                 initializeSelection()
                 isKeyboardFocused = true
+                scheduleBackgroundPrefetch(for: workspace.state.repositories)
             }
             .onChange(of: expandedRepositories) { _, expanded in
                 workspace.setExpandedRepositoryIds(expanded)
@@ -53,6 +56,7 @@ struct ProjectTreeSidebar: View {
                     expandedRepositories = filtered
                 }
                 restoreExpandedRepositoriesIfNeeded()
+                scheduleBackgroundPrefetch(for: repos)
 
                 if selection == nil, let repo = workspace.state.selectedRepository {
                     selection = .repository(repo)
@@ -423,6 +427,45 @@ struct ProjectTreeSidebar: View {
             return AnyHashable(repo.id)
         case .worktree(let worktree, _):
             return AnyHashable(worktree.id)
+        }
+    }
+
+    private func scheduleBackgroundPrefetch(for repositories: [Repository]) {
+        guard !repositories.isEmpty else {
+            backgroundPrefetchTask?.cancel()
+            backgroundPrefetchTask = nil
+            return
+        }
+
+        backgroundPrefetchRequestId &+= 1
+        let requestId = backgroundPrefetchRequestId
+
+        backgroundPrefetchTask?.cancel()
+        backgroundPrefetchTask = Task { @MainActor in
+            // Allow the initial repository selection load to start first.
+            try? await Task.sleep(nanoseconds: 300_000_000)
+            guard requestId == backgroundPrefetchRequestId else { return }
+
+            for repo in repositories {
+                if Task.isCancelled { return }
+                guard requestId == backgroundPrefetchRequestId else { return }
+                guard worktreesCache[repo.id] == nil else { continue }
+                guard !loadingRepositories.contains(repo.id) else { continue }
+                guard workspace.state.selectedRepository?.id != repo.id else { continue }
+
+                let loadedWorktrees = await workspace.loadWorktreesOnly(for: repo)
+                guard !Task.isCancelled else { return }
+                guard requestId == backgroundPrefetchRequestId else { return }
+                guard workspace.state.repositories.contains(where: { $0.id == repo.id }) else { continue }
+                guard worktreesCache[repo.id] == nil else { continue }
+                guard !loadedWorktrees.isEmpty else { continue }
+
+                withAnimation(DS.Animation.quick) {
+                    worktreesCache[repo.id] = loadedWorktrees
+                }
+
+                await Task.yield()
+            }
         }
     }
 }
