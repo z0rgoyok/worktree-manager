@@ -3,45 +3,56 @@ import SwiftUI
 // MARK: - Worktree Commands
 
 struct WorktreeCommands: Commands {
-    @ObservedObject var store: AppStore
+    @ObservedObject var root: RootComponent
+
+    private var workspace: WorkspaceComponent {
+        root.workspace
+    }
 
     var body: some Commands {
         CommandMenu("Worktree") {
-            WorktreeMenuItems(store: store, worktree: store.selectedWorktree, includeNewWorktree: true)
+            WorktreeMenuItems(root: root, workspace: workspace, worktree: workspace.state.selectedWorktree, includeNewWorktree: true)
         }
 
         CommandMenu("Repository") {
             Section {
                 Button("Add Repository...") {
-                    NotificationCenter.default.post(name: .showAddRepository, object: nil)
+                    root.send(.presentSheet(.addRepository))
                 }
                 .keyboardShortcut("o", modifiers: [.command, .shift])
 
                 Button("Show in Finder") {
-                    if let repo = store.selectedRepository {
+                    if let repo = workspace.state.selectedRepository {
                         NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: repo.path)
                     }
                 }
-                .disabled(store.selectedRepository == nil)
+                .disabled(workspace.state.selectedRepository == nil)
+            }
+
+            Section {
+                if let repo = workspace.state.selectedRepository {
+                    if repo.isArchived {
+                        Button("Restore Project") {
+                            Task { await workspace.restoreRepository(repo) }
+                        }
+                    } else {
+                        Button("Archive Project") {
+                            Task { await workspace.archiveRepository(repo) }
+                        }
+                    }
+                } else {
+                    Button("Archive Project") {}
+                        .disabled(true)
+                }
             }
 
             Section {
                 Button("Refresh All") {
-                    Task { await store.refreshWorktrees() }
+                    workspace.send(.refresh, root: root)
                 }
                 .keyboardShortcut("r", modifiers: [.command, .shift])
-                .disabled(store.selectedRepository == nil)
+                .disabled(workspace.state.selectedRepository == nil)
             }
         }
     }
-}
-
-// MARK: - Notification Names
-
-extension Notification.Name {
-    static let showAddWorktree = Notification.Name("showAddWorktree")
-    static let showAddRepository = Notification.Name("showAddRepository")
-    static let showCreatePR = Notification.Name("showCreatePR")
-    static let showFinishWorktree = Notification.Name("showFinishWorktree")
-    static let showHelp = Notification.Name("showHelp")
 }

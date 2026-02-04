@@ -7,12 +7,21 @@ let package = Package(
         .macOS(.v14)
     ],
     products: [
-        .executable(name: "WorktreeManager", targets: ["WorktreeManager"])
+        .executable(name: "WorktreeManager", targets: ["WorktreeManager"]),
+        .library(name: "DecomposeKit", targets: ["DecomposeKit"])
     ],
     targets: [
+        .target(
+            name: "DecomposeKit",
+            path: "Sources/DecomposeKit"
+        ),
         .executableTarget(
             name: "WorktreeManager",
-            path: "Sources"
+            dependencies: ["DecomposeKit"],
+            path: "Sources",
+            exclude: [
+                "DecomposeKit"
+            ]
         ),
         .testTarget(
             name: "WorktreeManagerTests",

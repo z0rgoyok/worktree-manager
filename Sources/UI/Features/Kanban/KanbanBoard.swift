@@ -2,7 +2,7 @@ import SwiftUI
 
 /// Main Kanban board view showing task columns
 struct KanbanBoard: View {
-    @EnvironmentObject var store: AppStore
+    @EnvironmentObject var workspace: WorkspaceComponent
     let selection: SidebarSelection?
     @State private var tasks: [KanbanTask] = []
     @State private var draggedTask: KanbanTask?
@@ -20,7 +20,7 @@ struct KanbanBoard: View {
                     WorktreeDetailHeader(
                         worktree: worktree,
                         repository: repo,
-                        statusCell: store.statusStore.cell(forWorktreePath: worktree.path)
+                        statusCell: workspace.statusCell(for: worktree.path)
                     )
                 }
             }

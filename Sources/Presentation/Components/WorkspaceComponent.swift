@@ -1,0 +1,416 @@
+import Foundation
+import Combine
+import DecomposeKit
+
+@MainActor
+final class WorkspaceComponent: ObservableObject {
+    struct State: Equatable {
+        var repositories: [Repository] = []
+        var selectedRepository: Repository?
+        var selectedWorktree: Worktree?
+        var worktrees: [Worktree] = []
+        var branches: [String] = []
+        var worktreeBasePath: String = ""
+        var sidebarSelection: SidebarSelection?
+    }
+
+    enum Effect: Equatable {
+        case showAlert(title: String, message: String)
+        case openURL(URL)
+    }
+
+    enum Action: Equatable {
+        case presentAddRepository
+        case presentAddWorktree
+        case presentCreatePR(worktreePath: String)
+        case presentCompleteWorktree(worktreePath: String)
+        case presentHelp
+        case refresh
+        case setSidebarSelection(SidebarSelection?)
+    }
+
+    @Published private(set) var state = State()
+
+    private let effectsEmitter = EffectEmitter<Effect>()
+    var effects: AsyncStream<Effect> { effectsEmitter.stream }
+
+    private let store: AppStore
+    private var cancellables: Set<AnyCancellable> = []
+    private var sidebarSelectionTask: Task<Void, Never>?
+
+    init(store: AppStore) {
+        self.store = store
+        bindStore()
+    }
+
+    func send(_ action: Action, root: RootComponent? = nil) {
+        switch action {
+        case .presentAddRepository:
+            root?.send(.presentSheet(.addRepository))
+        case .presentAddWorktree:
+            root?.send(.presentSheet(.addWorktree))
+        case .presentCreatePR(let worktreePath):
+            root?.send(.presentSheet(.createPR(worktreePath: worktreePath)))
+        case .presentCompleteWorktree(let worktreePath):
+            root?.send(.presentSheet(.completeWorktree(worktreePath: worktreePath)))
+        case .presentHelp:
+            root?.send(.presentSheet(.help))
+        case .refresh:
+            Task { [weak self] in
+                guard let self else { return }
+                do {
+                    try await self.store.refreshWorktrees()
+                } catch {
+                    self.effectsEmitter.emit(.showAlert(title: "Error", message: error.localizedDescription))
+                }
+            }
+        case .setSidebarSelection(let selection):
+            // Update UI state immediately so keyboard navigation feels synchronous.
+            state.sidebarSelection = selection
+
+            sidebarSelectionTask?.cancel()
+            sidebarSelectionTask = Task { [weak self] in
+                guard let self else { return }
+                defer { self.sidebarSelectionTask = nil }
+                await self.applySidebarSelection(selection)
+            }
+        }
+    }
+
+    func addRepository(at path: String) async {
+        do {
+            try await store.addRepository(at: path)
+        } catch {
+            effectsEmitter.emit(.showAlert(title: "Error", message: error.localizedDescription))
+        }
+    }
+
+    func createWorktree(
+        name: String,
+        branch: String,
+        createNewBranch: Bool,
+        baseBranch: String?,
+        copyPatterns: [CopyPattern]?
+    ) async {
+        do {
+            try await store.createWorktree(
+                name: name,
+                branch: branch,
+                createNewBranch: createNewBranch,
+                baseBranch: baseBranch,
+                copyPatterns: copyPatterns
+            )
+        } catch {
+            effectsEmitter.emit(.showAlert(title: "Error", message: error.localizedDescription))
+        }
+    }
+
+    func recreateBranchAndWorktree(name: String, branch: String, baseBranch: String, copyPatterns: [CopyPattern]?) async {
+        do {
+            try await store.recreateBranchAndWorktree(name: name, branch: branch, baseBranch: baseBranch, copyPatterns: copyPatterns)
+        } catch {
+            effectsEmitter.emit(.showAlert(title: "Error", message: error.localizedDescription))
+        }
+    }
+
+    func loadBranches() async {
+        await store.loadBranches()
+    }
+
+    func branchExists(_ branch: String) -> Bool {
+        store.branchExists(branch)
+    }
+
+    func preferredBaseBranch() -> String? {
+        store.preferredBaseBranch()
+    }
+
+    func setPreferredBaseBranch(_ branch: String) {
+        store.setPreferredBaseBranch(branch)
+    }
+
+    func loadCopyPreview(for repo: Repository) async -> [CopyPreviewItem] {
+        await store.loadCopyPreview(for: repo)
+    }
+
+    func loadWorktreesOnly(for repo: Repository) async -> [Worktree] {
+        await store.loadWorktreesOnly(for: repo)
+    }
+
+    func statusCell(for worktreePath: String) -> WorktreeStatusCell {
+        store.statusStore.cell(forWorktreePath: worktreePath)
+    }
+
+    func selectWorktree(_ worktree: Worktree?) {
+        store.selectedWorktree = worktree
+        state.selectedWorktree = worktree
+    }
+
+    func removeRepository(_ repo: Repository) async {
+        await store.removeRepository(repo)
+    }
+
+    func archiveRepository(_ repo: Repository) async {
+        await store.archiveRepository(repo)
+    }
+
+    func restoreRepository(_ repo: Repository) async {
+        await store.restoreRepository(repo)
+    }
+
+    func completeWorktree(_ worktree: Worktree, options: CompleteWorktreeOptions) async {
+        do {
+            try await store.completeWorktree(worktree, options: options)
+        } catch {
+            effectsEmitter.emit(.showAlert(title: "Error", message: error.localizedDescription))
+        }
+    }
+
+    func loadHasRemoteBranch(for worktree: Worktree) async -> Bool {
+        await store.loadHasRemoteBranch(for: worktree)
+    }
+
+    func openInFinder(_ worktree: Worktree) {
+        store.openInFinder(worktree)
+    }
+
+    func openInTerminal(_ worktree: Worktree) {
+        store.openInTerminal(worktree)
+    }
+
+    func openInEditor(_ worktree: Worktree, editor: Editor) {
+        do {
+            try store.openInEditor(worktree, editor: editor)
+        } catch {
+            effectsEmitter.emit(.showAlert(title: "Error", message: error.localizedDescription))
+        }
+    }
+
+    func configuredEditors() -> [Editor] {
+        store.configuredEditors
+    }
+
+    func allEditors() -> [Editor] {
+        store.allEditors
+    }
+
+    func isEditorInstalled(_ editor: Editor) -> Bool {
+        store.isEditorInstalled(editor)
+    }
+
+    func isEditorEnabled(_ editor: Editor) -> Bool {
+        store.isEditorEnabled(editor)
+    }
+
+    func setEditorEnabled(_ editor: Editor, enabled: Bool) {
+        objectWillChange.send()
+        store.setEditorEnabled(editor, enabled: enabled)
+    }
+
+    var rememberEditorChoice: Bool {
+        get { store.rememberEditorChoice }
+        set {
+            objectWillChange.send()
+            store.rememberEditorChoice = newValue
+        }
+    }
+
+    /// Preferred editor for current repository
+    func preferredEditor() -> Editor? {
+        guard let repo = state.selectedRepository else { return nil }
+        return store.preferredEditor(for: repo)
+    }
+
+    func setPreferredEditor(_ editor: Editor) {
+        guard let repo = state.selectedRepository else { return }
+        objectWillChange.send()
+        store.setPreferredEditor(editor, for: repo)
+    }
+
+    func clearPreferredEditor() {
+        guard let repo = state.selectedRepository else { return }
+        objectWillChange.send()
+        store.clearPreferredEditor(for: repo)
+    }
+
+    /// Opens worktree in remembered editor if available, returns true if opened
+    @discardableResult
+    func smartOpenInEditor(_ worktree: Worktree) -> Bool {
+        if rememberEditorChoice, let editor = preferredEditor() {
+            openInEditor(worktree, editor: editor)
+            return true
+        }
+        return false
+    }
+
+    /// Opens worktree in specific editor and optionally remembers choice
+    func openInEditorAndRemember(_ worktree: Worktree, editor: Editor) {
+        if rememberEditorChoice {
+            setPreferredEditor(editor)
+        }
+        openInEditor(worktree, editor: editor)
+    }
+
+    func loadExpandedRepositoryIds() -> Set<UUID> {
+        store.preferences.expandedRepositoryIds
+    }
+
+    func setExpandedRepositoryIds(_ ids: Set<UUID>) {
+        store.preferences.expandedRepositoryIds = ids
+    }
+
+    func push(_ worktree: Worktree) async {
+        do {
+            try await store.push(worktree)
+        } catch {
+            effectsEmitter.emit(.showAlert(title: "Error", message: error.localizedDescription))
+        }
+    }
+
+    func pull(_ worktree: Worktree) async {
+        do {
+            try await store.pull(worktree)
+        } catch {
+            effectsEmitter.emit(.showAlert(title: "Error", message: error.localizedDescription))
+        }
+    }
+
+    func refreshWorktreeStatus(_ worktree: Worktree) async {
+        await store.refreshWorktreeStatus(worktree)
+    }
+
+    func createPR(_ worktree: Worktree, title: String, body: String, baseBranch: String?) async {
+        do {
+            let url = try await store.createPR(worktree, title: title, body: body, baseBranch: baseBranch)
+            effectsEmitter.emit(.openURL(url))
+        } catch {
+            effectsEmitter.emit(.showAlert(title: "Error", message: error.localizedDescription))
+        }
+    }
+
+    func openPR(_ worktree: Worktree) {
+        if let url = store.openPRURL(worktree) {
+            effectsEmitter.emit(.openURL(url))
+        }
+    }
+
+    func mergeBranch(_ worktree: Worktree, into targetBranch: String) async {
+        do {
+            try await store.mergeBranch(worktree, into: targetBranch)
+        } catch {
+            effectsEmitter.emit(.showAlert(title: "Error", message: error.localizedDescription))
+        }
+    }
+
+    func lockWorktree(_ worktree: Worktree) async {
+        do {
+            try await store.lockWorktree(worktree)
+        } catch {
+            effectsEmitter.emit(.showAlert(title: "Error", message: error.localizedDescription))
+        }
+    }
+
+    func unlockWorktree(_ worktree: Worktree) async {
+        do {
+            try await store.unlockWorktree(worktree)
+        } catch {
+            effectsEmitter.emit(.showAlert(title: "Error", message: error.localizedDescription))
+        }
+    }
+
+    func pruneWorktrees() async {
+        do {
+            try await store.pruneWorktrees()
+        } catch {
+            effectsEmitter.emit(.showAlert(title: "Error", message: error.localizedDescription))
+        }
+    }
+
+    func removeWorktree(_ worktree: Worktree, force: Bool = false, deleteBranch: Bool = false) async {
+        do {
+            try await store.removeWorktree(worktree, force: force, deleteBranch: deleteBranch)
+        } catch {
+            effectsEmitter.emit(.showAlert(title: "Error", message: error.localizedDescription))
+        }
+    }
+
+    private func bindStore() {
+        store.$repositories
+            .sink { [weak self] in self?.state.repositories = $0 }
+            .store(in: &cancellables)
+
+        store.$selectedRepository
+            .sink { [weak self] repo in
+                guard let self else { return }
+                self.state.selectedRepository = repo
+                self.syncSidebarSelectionWithStore()
+            }
+            .store(in: &cancellables)
+
+        store.$selectedWorktree
+            .sink { [weak self] worktree in
+                guard let self else { return }
+                self.state.selectedWorktree = worktree
+                self.syncSidebarSelectionWithStore()
+            }
+            .store(in: &cancellables)
+
+        store.$worktrees
+            .sink { [weak self] in self?.state.worktrees = $0 }
+            .store(in: &cancellables)
+
+        store.$branches
+            .sink { [weak self] in self?.state.branches = $0 }
+            .store(in: &cancellables)
+
+        store.$worktreeBasePath
+            .sink { [weak self] in self?.state.worktreeBasePath = $0 }
+            .store(in: &cancellables)
+
+        syncSidebarSelectionWithStore()
+    }
+
+    private func applySidebarSelection(_ selection: SidebarSelection?) async {
+        if Task.isCancelled { return }
+        state.sidebarSelection = selection
+
+        guard let selection else {
+            store.selectedWorktree = nil
+            return
+        }
+
+        if store.selectedRepository?.id != selection.repository.id {
+            do {
+                try await store.selectRepository(selection.repository)
+                if Task.isCancelled { return }
+            } catch {
+                if error is CancellationError { return }
+                effectsEmitter.emit(.showAlert(title: "Error", message: error.localizedDescription))
+                return
+            }
+        }
+
+        if Task.isCancelled { return }
+        if case .worktree(let wt, _) = selection {
+            store.selectedWorktree = wt
+        } else {
+            store.selectedWorktree = nil
+        }
+    }
+
+    private func syncSidebarSelectionWithStore() {
+        // Avoid overwriting selection while a user-initiated navigation is in progress.
+        // The task will set the final selection when it completes.
+        if sidebarSelectionTask != nil { return }
+
+        if let repo = store.selectedRepository {
+            if let worktree = store.selectedWorktree {
+                state.sidebarSelection = .worktree(worktree, inRepository: repo)
+            } else {
+                state.sidebarSelection = .repository(repo)
+            }
+        } else {
+            state.sidebarSelection = nil
+        }
+    }
+}

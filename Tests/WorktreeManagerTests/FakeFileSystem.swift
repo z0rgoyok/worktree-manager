@@ -2,11 +2,16 @@ import Foundation
 @testable import WorktreeManager
 
 final class FakeFileSystem: FileSystemHandling {
+    enum FileError: Error {
+        case missing(path: String)
+    }
+
     private(set) var existingPaths: Set<String>
     private(set) var directoryPaths: Set<String>
     private(set) var createdDirectories: [String] = []
     private(set) var copiedItems: [(source: String, destination: String)] = []
     var fileSizes: [String: Int64] = [:]
+    var textFiles: [String: String] = [:]
 
     init(existingPaths: Set<String> = [], directoryPaths: Set<String> = []) {
         self.existingPaths = existingPaths
@@ -40,5 +45,11 @@ final class FakeFileSystem: FileSystemHandling {
         guard directoryPaths.contains(path) else { return nil }
         return fileSizes[path] ?? 0
     }
-}
 
+    func readTextFile(atPath path: String) throws -> String {
+        guard let contents = textFiles[path] else {
+            throw FileError.missing(path: path)
+        }
+        return contents
+    }
+}

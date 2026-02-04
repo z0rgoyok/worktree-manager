@@ -2,20 +2,13 @@ import SwiftUI
 
 /// Sheet for configuring copy patterns for a specific repository
 struct RepositoryCopyPatternsSheet: View {
-    @EnvironmentObject var store: AppStore
+    @EnvironmentObject var settings: SettingsComponent
     @Environment(\.dismiss) var dismiss
 
     let repository: Repository
 
-    @State private var useCustomPatterns: Bool
-    @State private var patterns: [CopyPattern]
-
-    init(repository: Repository, store: AppStore) {
-        self.repository = repository
-        let customPatterns = store.copyPatterns(for: repository)
-        _useCustomPatterns = State(initialValue: customPatterns != nil)
-        _patterns = State(initialValue: customPatterns ?? store.defaultCopyPatterns)
-    }
+    @State private var useCustomPatterns = false
+    @State private var patterns: [CopyPattern] = []
 
     var body: some View {
         VStack(spacing: 20) {
@@ -30,7 +23,7 @@ struct RepositoryCopyPatternsSheet: View {
             Toggle("Use custom patterns for this repository", isOn: $useCustomPatterns)
                 .onChange(of: useCustomPatterns) { _, newValue in
                     if !newValue {
-                        patterns = store.defaultCopyPatterns
+                        patterns = settings.state.defaultCopyPatterns
                     }
                 }
 
@@ -42,12 +35,12 @@ struct RepositoryCopyPatternsSheet: View {
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
 
-                    if store.defaultCopyPatterns.isEmpty {
+                    if settings.state.defaultCopyPatterns.isEmpty {
                         Text("No default patterns configured")
                             .foregroundStyle(.tertiary)
                             .font(.subheadline)
                     } else {
-                        ForEach(store.defaultCopyPatterns) { pattern in
+                        ForEach(settings.state.defaultCopyPatterns) { pattern in
                             HStack {
                                 Image(systemName: pattern.pattern.hasSuffix("/") ? "folder" : "doc")
                                     .foregroundStyle(.secondary)
@@ -86,21 +79,25 @@ struct RepositoryCopyPatternsSheet: View {
         }
         .padding()
         .frame(width: 400, height: 400)
+        .onAppear {
+            let customPatterns = settings.copyPatterns(for: repository)
+            useCustomPatterns = customPatterns != nil
+            patterns = customPatterns ?? settings.state.defaultCopyPatterns
+        }
     }
 
     private func save() {
         if useCustomPatterns {
-            store.setCopyPatterns(patterns, for: repository)
+            settings.setCopyPatterns(patterns, for: repository)
         } else {
-            store.removeCopyPatterns(for: repository)
+            settings.removeCopyPatterns(for: repository)
         }
     }
 }
 
 #Preview {
     RepositoryCopyPatternsSheet(
-        repository: Repository(path: "/path/to/repo", name: "my-repo"),
-        store: AppStore.makeDefault()
+        repository: Repository(path: "/path/to/repo", name: "my-repo")
     )
-    .environmentObject(AppStore.makeDefault())
+    .environmentObject(SettingsComponent(store: AppStore.makeDefault(loadOnInit: false)))
 }

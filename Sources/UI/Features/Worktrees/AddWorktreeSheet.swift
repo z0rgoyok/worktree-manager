@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct AddWorktreeSheet: View {
-    @EnvironmentObject var store: AppStore
+    @EnvironmentObject var workspace: WorkspaceComponent
     @Environment(\.dismiss) var dismiss
 
     @State private var worktreeName = ""
@@ -35,7 +35,7 @@ struct AddWorktreeSheet: View {
                         .textFieldStyle(.roundedBorder)
 
                     Group {
-                        if store.branches.isEmpty {
+                        if workspace.state.branches.isEmpty {
                             HStack(spacing: 8) {
                                 ProgressView()
                                     .controlSize(.small)
@@ -52,7 +52,7 @@ struct AddWorktreeSheet: View {
                     }
                 } else {
                     Group {
-                        if store.branches.isEmpty {
+                        if workspace.state.branches.isEmpty {
                             HStack(spacing: 8) {
                                 ProgressView()
                                     .controlSize(.small)
@@ -61,7 +61,7 @@ struct AddWorktreeSheet: View {
                             }
                         } else {
                             Picker("Branch", selection: $selectedExistingBranch) {
-                                ForEach(store.branches, id: \.self) { branch in
+                                ForEach(workspace.state.branches, id: \.self) { branch in
                                     Text(branch).tag(branch)
                                 }
                             }
@@ -69,8 +69,8 @@ struct AddWorktreeSheet: View {
                     }
                 }
 
-                if let repo = store.selectedRepository {
-                    let previewPath = "\(store.worktreeBasePath)/\(repo.name)/\(worktreeName)"
+                if let repo = workspace.state.selectedRepository {
+                    let previewPath = "\(workspace.state.worktreeBasePath)/\(repo.name)/\(worktreeName)"
 
                     LabeledContent("Location") {
                         Text(previewPath)
@@ -137,7 +137,7 @@ struct AddWorktreeSheet: View {
                     attemptCreate()
                 }
                 .keyboardShortcut(.defaultAction)
-                .disabled(!isValid || store.branches.isEmpty || isPreparing || isSubmitting)
+                .disabled(!isValid || workspace.state.branches.isEmpty || isPreparing || isSubmitting)
             }
         }
         .padding()
@@ -165,7 +165,7 @@ struct AddWorktreeSheet: View {
                 onUseExisting: {
                     // Use existing branch without creating new
                     Task {
-                        await store.createWorktree(
+                        await workspace.createWorktree(
                             name: worktreeName,
                             branch: branchName,
                             createNewBranch: false,
@@ -178,7 +178,7 @@ struct AddWorktreeSheet: View {
                 onRecreate: {
                     // Delete branch and create new
                     Task {
-                        await store.recreateBranchAndWorktree(
+                        await workspace.recreateBranchAndWorktree(
                             name: worktreeName,
                             branch: branchName,
                             baseBranch: baseBranch,
@@ -193,8 +193,8 @@ struct AddWorktreeSheet: View {
 
     private var mainBranches: [String] {
         let priorityBranches = ["main", "master", "develop", "development"]
-        let priority = store.branches.filter { priorityBranches.contains($0) }
-        let others = store.branches.filter { !priorityBranches.contains($0) && !$0.contains("/") }
+        let priority = workspace.state.branches.filter { priorityBranches.contains($0) }
+        let others = workspace.state.branches.filter { !priorityBranches.contains($0) && !$0.contains("/") }
         return priority + others
     }
 
@@ -211,7 +211,7 @@ struct AddWorktreeSheet: View {
     private func attemptCreate() {
         if createNewBranch {
             // Check if branch already exists
-            if store.branchExists(branchName) {
+            if workspace.branchExists(branchName) {
                 showBranchConflict = true
                 return
             }
@@ -229,12 +229,12 @@ struct AddWorktreeSheet: View {
         let base = createNewBranch ? baseBranch : nil
 
         if createNewBranch {
-            store.setPreferredBaseBranch(baseBranch)
+            workspace.setPreferredBaseBranch(baseBranch)
         }
 
         Task {
             isSubmitting = true
-            await store.createWorktree(
+            await workspace.createWorktree(
                 name: worktreeName,
                 branch: branch,
                 createNewBranch: createNewBranch,
@@ -251,24 +251,24 @@ struct AddWorktreeSheet: View {
         isPreparing = true
         defer { isPreparing = false }
 
-        if store.branches.isEmpty {
-            await store.loadBranches()
+        if workspace.state.branches.isEmpty {
+            await workspace.loadBranches()
         }
 
-        if selectedExistingBranch.isEmpty, let firstBranch = store.branches.first {
+        if selectedExistingBranch.isEmpty, let firstBranch = workspace.state.branches.first {
             selectedExistingBranch = firstBranch
         }
 
-        if let preferred = store.preferredBaseBranch(), store.branches.contains(preferred) {
+        if let preferred = workspace.preferredBaseBranch(), workspace.state.branches.contains(preferred) {
             baseBranch = preferred
-        } else if let main = store.branches.first(where: { $0 == "main" || $0 == "master" }) {
+        } else if let main = workspace.state.branches.first(where: { $0 == "main" || $0 == "master" }) {
             baseBranch = main
-        } else if let first = store.branches.first {
+        } else if let first = workspace.state.branches.first {
             baseBranch = first
         }
 
-        if let repo = store.selectedRepository {
-            copyPreview = await store.loadCopyPreview(for: repo)
+        if let repo = workspace.state.selectedRepository {
+            copyPreview = await workspace.loadCopyPreview(for: repo)
             enabledCopyPatterns = Set(copyPreview.filter { $0.exists }.map { $0.pattern })
         }
     }
@@ -276,5 +276,5 @@ struct AddWorktreeSheet: View {
 
 #Preview {
     AddWorktreeSheet()
-        .environmentObject(AppStore.makeDefault())
+        .environmentObject(WorkspaceComponent(store: AppStore.makeDefault(loadOnInit: false)))
 }

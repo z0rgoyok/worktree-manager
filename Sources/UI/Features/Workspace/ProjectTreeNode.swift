@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct ProjectTreeNode: View {
-    @EnvironmentObject var store: AppStore
+    @EnvironmentObject var workspace: WorkspaceComponent
     let repository: Repository
     @Binding var selection: SidebarSelection?
     @Binding var isExpanded: Bool
@@ -10,6 +10,14 @@ struct ProjectTreeNode: View {
     let onCopySettings: () -> Void
 
     @State private var isHovered = false
+
+    private var repositorySnapshot: Repository {
+        workspace.state.repositories.first(where: { $0.id == repository.id }) ?? repository
+    }
+    
+    private var isArchived: Bool {
+        repositorySnapshot.isArchived
+    }
 
     private var isRepoSelected: Bool {
         if case .repository(let r) = selection, r.id == repository.id {
@@ -38,28 +46,28 @@ struct ProjectTreeNode: View {
                 // Folder icon
                 Image(systemName: "folder.fill")
                     .font(.system(size: 14))
-                    .foregroundStyle(.blue)
+                    .foregroundStyle(isArchived ? DS.Colors.textTertiary : .blue)
                     .frame(width: DS.Sizes.treeIconSize)
 
                 // Name and path
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(repository.name)
+                    Text(repositorySnapshot.name)
                         .font(DS.Typography.treeItem)
-                        .foregroundStyle(DS.Colors.textPrimary)
+                        .foregroundStyle(isArchived ? DS.Colors.textSecondary : DS.Colors.textPrimary)
                         .lineLimit(1)
 
-                    Text(repository.path)
+                    Text(repositorySnapshot.path)
                         .font(DS.Typography.treeItemSecondary)
-                        .foregroundStyle(DS.Colors.textTertiary)
+                        .foregroundStyle(isArchived ? DS.Colors.textQuaternary : DS.Colors.textTertiary)
                         .lineLimit(1)
                         .truncationMode(.middle)
                 }
-                .help(repository.path)
+                .help(repositorySnapshot.path)
 
                 Spacer()
 
                 // Worktree count badge
-                if !worktrees.isEmpty {
+                if !isArchived, !worktrees.isEmpty {
                     Text("\(worktrees.count)")
                         .font(DS.Typography.badge)
                         .foregroundStyle(DS.Colors.textSecondary)
@@ -88,8 +96,7 @@ struct ProjectTreeNode: View {
                     }
                 } else {
                     // Select and expand
-                    selection = .repository(repository)
-                    Task { await store.selectRepository(repository) }
+                    selection = .repository(repositorySnapshot)
                     if !isExpanded {
                         withAnimation(DS.Animation.quick) {
                             isExpanded = true
@@ -117,8 +124,24 @@ struct ProjectTreeNode: View {
 
                 Divider()
 
+                if isArchived {
+                    Button {
+                        Task { await workspace.restoreRepository(repositorySnapshot) }
+                    } label: {
+                        Label("Restore Project", systemImage: "arrow.uturn.left")
+                    }
+                } else {
+                    Button {
+                        Task { await workspace.archiveRepository(repositorySnapshot) }
+                    } label: {
+                        Label("Archive Project", systemImage: "archivebox")
+                    }
+                }
+
+                Divider()
+
                 Button("Remove from List", role: .destructive) {
-                    Task { await store.removeRepository(repository) }
+                    Task { await workspace.removeRepository(repositorySnapshot) }
                 }
             }
 
@@ -155,8 +178,9 @@ struct ProjectTreeNode: View {
                     worktree: worktree,
                     repository: repository,
                     selection: $selection,
-                    statusCell: store.statusStore.cell(forWorktreePath: worktree.path)
+                    statusCell: workspace.statusCell(for: worktree.path)
                 )
+                .id(AnyHashable(worktree.id))
             }
         }
     }

@@ -229,11 +229,23 @@ Before finalizing:
 
 - `Package.swift`: Swift Package Manager manifest (single executable target).
 - `Sources/App/`: SwiftUI entry point (`WorktreeManagerApp`) and app-level commands.
-- `Sources/UI/`: SwiftUI views, menus, and design system (UI and user flows), organized by feature.
-- `Sources/Presentation/`: presentation helpers (formatting, view models, mapping) without SwiftUI.
-- `Sources/Application/UseCases/`: `AppStore` (central state + use cases).
-- `Sources/Domain/Entities/`: core models (`Repository`, `Worktree`, `Editor`, etc.).
-- `Sources/Infrastructure/`: integration code (Git CLI wrapper, persistence, filesystem watching).
+- `Sources/Domain/Entities/`: core models (`Repository`, `Worktree`, `Editor`, `WorktreeStatus`, etc.).
+- `Sources/Application/`:
+  - `UseCases/`: `AppStore` (central state) + use-case extensions (`AppStore+Worktree`, etc.).
+  - `Ports/`: outbound port interfaces (`GitClient`, `EditorOpening`, `FileSystemWatching`, etc.).
+  - `State/`: application state models (`ActivityCenter`, `WorktreeStatusStore`).
+  - `Errors/`: application-level errors (`AppStoreError`).
+- `Sources/Infrastructure/`:
+  - `Git/`: `GitService`, `EditorService`, `StorageService`.
+  - `FileSystem/`: `FileSystemService`, `FileSystemWatcher`.
+  - `System/`: `SystemService` (Finder/Terminal integration).
+  - `Process/`: `CommandEnvironment`.
+  - `Adapters/`: protocol conformances wiring ports to implementations.
+- `Sources/UI/`: SwiftUI views, menus, and design system (organized by feature).
+- `Sources/Presentation/`:
+  - `Formatting/`: domain → UI formatting extensions.
+  - `Components/`: Decompose-style components (`RootComponent`, `SettingsComponent`).
+- `Sources/DecomposeKit/`: lightweight component architecture helpers (`EffectEmitter`, `ChildSlot`, `ChildStack`).
 - Root assets: `AppIcon.*`, `generate_icon.py` (optional icon generation tooling).
 
 The code follows a clean-architecture split: keep UI in `UI`, business rules in `Application`/`Domain`, and side effects (Git, filesystem, persistence) in `Infrastructure`.

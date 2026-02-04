@@ -7,5 +7,5 @@ protocol FileSystemHandling {
     func copyItem(atPath srcPath: String, toPath dstPath: String) throws
     func fileSize(atPath path: String) -> Int64?
     func directorySize(atPath path: String) -> Int64?
+    func readTextFile(atPath path: String) throws -> String
 }
-

@@ -7,19 +7,22 @@ struct StatusExplanation: View {
     let description: String
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
+        HStack(alignment: .center, spacing: DS.Spacing.md) {
             Image(systemName: icon)
+                .font(.system(size: 16))
                 .foregroundStyle(color)
-                .frame(width: 20)
+                .frame(width: 24)
 
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: DS.Spacing.xxxs) {
                 Text(title)
+                    .font(.subheadline)
                     .fontWeight(.medium)
+                    .foregroundStyle(DS.Colors.textPrimary)
+
                 Text(description)
                     .font(.callout)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(DS.Colors.textSecondary)
             }
         }
     }
 }
-

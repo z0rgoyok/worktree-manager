@@ -114,10 +114,23 @@ The app follows Clean Architecture principles:
 
 ```
 Sources/
-├── App/                    # App entry point
-├── Domain/Entities/        # Core business objects
-├── Application/UseCases/   # Business logic and state
-├── Infrastructure/Git/     # Git CLI wrapper, storage
-├── UI/                     # SwiftUI views (organized by feature)
-└── Presentation/           # Presentation helpers (formatting, mapping)
+├── App/                        # App entry point (WorktreeManagerApp, Commands)
+├── Domain/
+│   └── Entities/               # Core models (Repository, Worktree, Editor, etc.)
+├── Application/
+│   ├── UseCases/               # AppStore (central state) + use-case extensions
+│   ├── Ports/                  # Outbound port interfaces (GitClient, EditorOpening, etc.)
+│   ├── State/                  # Application state (ActivityCenter, WorktreeStatusStore)
+│   └── Errors/                 # Application-level errors
+├── Infrastructure/
+│   ├── Git/                    # GitService, EditorService, StorageService
+│   ├── FileSystem/             # FileSystemService, FileSystemWatcher
+│   ├── System/                 # SystemService (shell integration)
+│   ├── Process/                # CommandEnvironment
+│   └── Adapters/               # Protocol conformances wiring ports to implementations
+├── UI/                         # SwiftUI views, menus, design system (organized by feature)
+├── Presentation/
+│   ├── Formatting/             # Domain → UI formatting extensions
+│   └── Components/             # Decompose-style components (RootComponent, etc.)
+└── DecomposeKit/               # Lightweight component architecture helpers
 ```

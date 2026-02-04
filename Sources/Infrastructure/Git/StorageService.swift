@@ -6,11 +6,15 @@ final class StorageService {
 
     private let defaults = UserDefaults.standard
     private let repositoriesKey = "savedRepositories"
-    private let defaultEditorKey = "defaultEditor"
-    private let defaultEditorIdKey = "defaultEditorId"
     private let worktreeBasePathKey = "worktreeBasePath"
     private let preferredBaseBranchesKey = "preferredBaseBranches"
     private let worktreeBaseBranchesKey = "worktreeBaseBranches"
+    private let expandedRepositoriesKey = "expandedRepositories"
+    private let lastSelectedRepositoryIdKey = "lastSelectedRepositoryId"
+    private let lastSelectedWorktreePathKey = "lastSelectedWorktreePath"
+    private let rememberEditorChoiceKey = "rememberEditorChoice"
+    private let repositoryPreferredEditorsKey = "repositoryPreferredEditors"
+    private let enabledEditorIdsKey = "enabledEditorIds"
 
     private init() {}
 
@@ -29,36 +33,64 @@ final class StorageService {
         defaults.set(data, forKey: repositoriesKey)
     }
 
-    // MARK: - Default Editor
+    // MARK: - Remember Editor Choice (per repository)
 
-    var defaultEditor: Editor? {
+    var rememberEditorChoice: Bool {
+        get { defaults.bool(forKey: rememberEditorChoiceKey) }
+        set { defaults.set(newValue, forKey: rememberEditorChoiceKey) }
+    }
+
+    func preferredEditorId(forRepositoryId id: UUID) -> String? {
+        let dict = defaults.dictionary(forKey: repositoryPreferredEditorsKey) as? [String: String] ?? [:]
+        return dict[id.uuidString]
+    }
+
+    func setPreferredEditorId(_ editorId: String, forRepositoryId id: UUID) {
+        var dict = defaults.dictionary(forKey: repositoryPreferredEditorsKey) as? [String: String] ?? [:]
+        dict[id.uuidString] = editorId
+        defaults.set(dict, forKey: repositoryPreferredEditorsKey)
+    }
+
+    func removePreferredEditorId(forRepositoryId id: UUID) {
+        var dict = defaults.dictionary(forKey: repositoryPreferredEditorsKey) as? [String: String] ?? [:]
+        dict.removeValue(forKey: id.uuidString)
+        defaults.set(dict, forKey: repositoryPreferredEditorsKey)
+    }
+
+    // MARK: - Enabled Editors
+
+    /// Returns nil if never configured (means all enabled), or the set of enabled IDs
+    var enabledEditorIds: Set<String>? {
         get {
-            guard let data = defaults.data(forKey: defaultEditorKey),
-                  let editor = try? JSONDecoder().decode(Editor.self, from: data) else {
+            guard let array = defaults.array(forKey: enabledEditorIdsKey) as? [String] else {
                 return nil
             }
-            return editor
+            return Set(array)
         }
         set {
-            if let editor = newValue,
-               let data = try? JSONEncoder().encode(editor) {
-                defaults.set(data, forKey: defaultEditorKey)
+            if let ids = newValue {
+                defaults.set(Array(ids).sorted(), forKey: enabledEditorIdsKey)
             } else {
-                defaults.removeObject(forKey: defaultEditorKey)
+                defaults.removeObject(forKey: enabledEditorIdsKey)
             }
         }
     }
 
-    var defaultEditorId: String {
-        get {
-            if let id = defaults.string(forKey: defaultEditorIdKey) {
-                return id
-            }
-            return defaultEditor?.id ?? ""
+    func isEditorEnabled(_ editorId: String) -> Bool {
+        guard let enabled = enabledEditorIds else {
+            return true // All enabled by default
         }
-        set {
-            defaults.set(newValue, forKey: defaultEditorIdKey)
+        return enabled.contains(editorId)
+    }
+
+    func setEditorEnabled(_ editorId: String, enabled: Bool, allEditorIds: [String]) {
+        var current = enabledEditorIds ?? Set(allEditorIds)
+        if enabled {
+            current.insert(editorId)
+        } else {
+            current.remove(editorId)
         }
+        enabledEditorIds = current
     }
 
     // MARK: - Worktree Base Path
@@ -75,6 +107,47 @@ final class StorageService {
     private var defaultWorktreeBasePath: String {
         let home = FileManager.default.homeDirectoryForCurrentUser.path
         return "\(home)/worktrees"
+    }
+
+    // MARK: - Sidebar Expansion (UI)
+
+    var expandedRepositoryIds: Set<UUID> {
+        get {
+            let strings = defaults.array(forKey: expandedRepositoriesKey) as? [String] ?? []
+            let ids = strings.compactMap(UUID.init(uuidString:))
+            return Set(ids)
+        }
+        set {
+            let strings = newValue.map(\.uuidString).sorted()
+            defaults.set(strings, forKey: expandedRepositoriesKey)
+        }
+    }
+
+    // MARK: - Sidebar Selection (UI)
+
+    var lastSelectedRepositoryId: UUID? {
+        get {
+            guard let value = defaults.string(forKey: lastSelectedRepositoryIdKey) else { return nil }
+            return UUID(uuidString: value)
+        }
+        set {
+            if let id = newValue {
+                defaults.set(id.uuidString, forKey: lastSelectedRepositoryIdKey)
+            } else {
+                defaults.removeObject(forKey: lastSelectedRepositoryIdKey)
+            }
+        }
+    }
+
+    var lastSelectedWorktreePath: String? {
+        get { defaults.string(forKey: lastSelectedWorktreePathKey) }
+        set {
+            if let path = newValue, !path.isEmpty {
+                defaults.set(path, forKey: lastSelectedWorktreePathKey)
+            } else {
+                defaults.removeObject(forKey: lastSelectedWorktreePathKey)
+            }
+        }
     }
 
     // MARK: - Preferred Base Branches

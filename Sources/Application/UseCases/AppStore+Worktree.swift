@@ -3,11 +3,16 @@ import Foundation
 // MARK: - Worktree Use Cases
 
 extension AppStore {
-    func refreshWorktrees(for repo: Repository? = nil) async {
+    func refreshWorktrees(for repo: Repository? = nil) async throws {
         guard let repo = repo ?? selectedRepository else {
             worktrees = []
             return
         }
+
+        let requestId = nextRefreshWorktreesRequestToken()
+        let repoId = repo.id
+
+        var capturedError: Error?
 
         await withGlobalActivity(kind: .refresh, message: "Refreshing worktrees…") {
             isLoading = true
@@ -15,6 +20,10 @@ extension AppStore {
 
             do {
                 let listedWorktrees = try await runIO { try self.git.listWorktrees(at: repo.path) }
+                guard !Task.isCancelled else { return }
+                guard isLatestRefreshWorktreesRequestToken(requestId) else { return }
+                guard selectedRepository?.id == repoId else { return }
+
                 let enrichedWorktrees = listedWorktrees.map { worktree in
                     let baseBranch = preferences.worktreeBaseBranch(forWorktreePath: worktree.path)
                     return worktree.withBaseBranch(baseBranch)
@@ -23,12 +32,27 @@ extension AppStore {
                     worktrees = enrichedWorktrees
                 }
             } catch {
-                showError(message: error.localizedDescription)
+                // Ignore cancellations and stale results to avoid leaking worktrees across repositories.
+                if error is CancellationError || Task.isCancelled { return }
+                guard isLatestRefreshWorktreesRequestToken(requestId) else { return }
+                guard selectedRepository?.id == repoId else { return }
+
                 worktrees = []
+                capturedError = error
             }
+
+            guard !Task.isCancelled else { return }
+            guard isLatestRefreshWorktreesRequestToken(requestId) else { return }
+            guard selectedRepository?.id == repoId else { return }
 
             updateWatchedPaths()
             await refreshAllStatuses()
+        }
+
+        if let capturedError,
+           isLatestRefreshWorktreesRequestToken(requestId),
+           selectedRepository?.id == repoId {
+            throw capturedError
         }
     }
 
@@ -38,10 +62,22 @@ extension AppStore {
             return
         }
 
+        let requestId = nextLoadBranchesRequestToken()
+        let repoId = repo.id
+
         await withGlobalActivity(kind: .refresh, message: "Loading branches…") {
             do {
-                branches = try await runIO { try self.git.listBranches(at: repo.path) }
+                let loadedBranches = try await runIO { try self.git.listBranches(at: repo.path) }
+                guard !Task.isCancelled else { return }
+                guard isLatestLoadBranchesRequestToken(requestId) else { return }
+                guard selectedRepository?.id == repoId else { return }
+
+                branches = loadedBranches
             } catch {
+                if error is CancellationError || Task.isCancelled { return }
+                guard isLatestLoadBranchesRequestToken(requestId) else { return }
+                guard selectedRepository?.id == repoId else { return }
+
                 branches = []
             }
         }
@@ -53,21 +89,21 @@ extension AppStore {
         createNewBranch: Bool,
         baseBranch: String?,
         copyPatterns: [CopyPattern]? = nil
-    ) async {
+    ) async throws {
         guard let repo = selectedRepository else { return }
         guard !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            showError(message: "Worktree name is required")
-            return
+            throw AppStoreError.validation(message: "Worktree name is required")
         }
         guard !branch.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            showError(message: "Branch name is required")
-            return
+            throw AppStoreError.validation(message: "Branch name is required")
         }
 
         let basePath = worktreeBasePath
         let repoName = repo.name
         let parentPath = "\(basePath)/\(repoName)"
         let worktreePath = "\(parentPath)/\(name)"
+
+        var capturedError: Error?
 
         await withWorktreeActivity(
             worktreePath: worktreePath,
@@ -96,15 +132,18 @@ extension AppStore {
                 // Copy files from main worktree
                 let patterns = copyPatterns ?? effectiveCopyPatterns(for: repo)
                 if !patterns.isEmpty {
-                    let result = await copyFiles(patterns: patterns, from: repo.path, to: worktreePath)
-                    lastCopyResult = result
+                    _ = await copyFiles(patterns: patterns, from: repo.path, to: worktreePath)
                 }
 
-                await refreshWorktrees(for: repo)
+                try await refreshWorktrees(for: repo)
                 await loadBranches(for: repo)
             } catch {
-                showError(message: error.localizedDescription)
+                capturedError = error
             }
+        }
+
+        if let capturedError {
+            throw capturedError
         }
     }
 
@@ -113,12 +152,14 @@ extension AppStore {
         return git.branchExists(at: repo.path, branch: branch)
     }
 
-    func recreateBranchAndWorktree(name: String, branch: String, baseBranch: String, copyPatterns: [CopyPattern]? = nil) async {
+    func recreateBranchAndWorktree(name: String, branch: String, baseBranch: String, copyPatterns: [CopyPattern]? = nil) async throws {
         guard let repo = selectedRepository else { return }
         let basePath = worktreeBasePath
         let repoName = repo.name
         let parentPath = "\(basePath)/\(repoName)"
         let worktreePath = "\(parentPath)/\(name)"
+
+        var capturedError: Error?
 
         await withWorktreeActivity(
             worktreePath: worktreePath,
@@ -147,23 +188,25 @@ extension AppStore {
                 // Copy files from main worktree
                 let patterns = copyPatterns ?? effectiveCopyPatterns(for: repo)
                 if !patterns.isEmpty {
-                    let result = await copyFiles(patterns: patterns, from: repo.path, to: worktreePath)
-                    lastCopyResult = result
+                    _ = await copyFiles(patterns: patterns, from: repo.path, to: worktreePath)
                 }
 
-                await refreshWorktrees(for: repo)
+                try await refreshWorktrees(for: repo)
                 await loadBranches(for: repo)
             } catch {
-                showError(message: error.localizedDescription)
+                capturedError = error
             }
+        }
+
+        if let capturedError {
+            throw capturedError
         }
     }
 
-    func removeWorktree(_ worktree: Worktree, force: Bool = false, deleteBranch: Bool = false) async {
+    func removeWorktree(_ worktree: Worktree, force: Bool = false, deleteBranch: Bool = false) async throws {
         guard let repo = selectedRepository else { return }
         guard !worktree.isMain else {
-            showError(message: GitError.cannotRemoveMainWorktree.localizedDescription)
-            return
+            throw AppStoreError.cannotRemoveMainWorktree
         }
 
         isLoading = true
@@ -179,20 +222,21 @@ extension AppStore {
                 try? await runIO { try self.git.deleteBranch(at: repo.path, branch: branch, force: force) }
             }
 
-            await refreshWorktrees(for: repo)
+            try await refreshWorktrees(for: repo)
             await loadBranches(for: repo)
         } catch {
-            showError(message: error.localizedDescription)
+            throw error
         }
     }
 
     /// Complete worktree with all cleanup options
-    func completeWorktree(_ worktree: Worktree, options: CompleteWorktreeOptions) async {
+    func completeWorktree(_ worktree: Worktree, options: CompleteWorktreeOptions) async throws {
         guard let repo = selectedRepository else { return }
         guard !worktree.isMain else {
-            showError(message: GitError.cannotRemoveMainWorktree.localizedDescription)
-            return
+            throw AppStoreError.cannotRemoveMainWorktree
         }
+
+        var capturedError: Error?
 
         await withWorktreeActivity(
             worktreePath: worktree.path,
@@ -232,11 +276,15 @@ extension AppStore {
                     try? await runIO { try self.git.deleteRemoteBranch(at: repo.path, branch: worktree.branch) }
                 }
 
-                await refreshWorktrees(for: repo)
+                try await refreshWorktrees(for: repo)
                 await loadBranches(for: repo)
             } catch {
-                showError(message: error.localizedDescription)
+                capturedError = error
             }
+        }
+
+        if let capturedError {
+            throw capturedError
         }
     }
 
@@ -253,39 +301,51 @@ extension AppStore {
         return git.hasRemoteBranch(at: repo.path, branch: worktree.branch)
     }
 
-    func lockWorktree(_ worktree: Worktree) async {
+    func lockWorktree(_ worktree: Worktree) async throws {
         guard let repo = selectedRepository else { return }
+        var capturedError: Error?
         await withWorktreeActivity(worktreePath: worktree.path, kind: .lock, message: "Locking \(worktree.name)…") {
             do {
                 try await runIO { try self.git.lockWorktree(at: repo.path, worktreePath: worktree.path, reason: nil) }
-                await refreshWorktrees(for: repo)
+                try await refreshWorktrees(for: repo)
             } catch {
-                showError(message: error.localizedDescription)
+                capturedError = error
             }
+        }
+        if let capturedError {
+            throw capturedError
         }
     }
 
-    func unlockWorktree(_ worktree: Worktree) async {
+    func unlockWorktree(_ worktree: Worktree) async throws {
         guard let repo = selectedRepository else { return }
+        var capturedError: Error?
         await withWorktreeActivity(worktreePath: worktree.path, kind: .unlock, message: "Unlocking \(worktree.name)…") {
             do {
                 try await runIO { try self.git.unlockWorktree(at: repo.path, worktreePath: worktree.path) }
-                await refreshWorktrees(for: repo)
+                try await refreshWorktrees(for: repo)
             } catch {
-                showError(message: error.localizedDescription)
+                capturedError = error
             }
+        }
+        if let capturedError {
+            throw capturedError
         }
     }
 
-    func pruneWorktrees() async {
+    func pruneWorktrees() async throws {
         guard let repo = selectedRepository else { return }
+        var capturedError: Error?
         await withGlobalActivity(kind: .prune, message: "Pruning worktrees…") {
             do {
                 try await runIO { try self.git.pruneWorktrees(at: repo.path) }
-                await refreshWorktrees(for: repo)
+                try await refreshWorktrees(for: repo)
             } catch {
-                showError(message: error.localizedDescription)
+                capturedError = error
             }
+        }
+        if let capturedError {
+            throw capturedError
         }
     }
 }

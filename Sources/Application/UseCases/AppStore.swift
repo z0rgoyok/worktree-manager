@@ -7,17 +7,24 @@ final class AppStore: ObservableObject {
     // MARK: - Published State
 
     @Published var repositories: [Repository] = []
-    @Published var selectedRepository: Repository?
-    @Published var selectedWorktree: Worktree?
+    @Published var selectedRepository: Repository? = nil {
+        didSet {
+            persistLastSelection()
+            if oldValue?.id != selectedRepository?.id {
+                worktreePathByGitWorktreeId.removeAll()
+            }
+        }
+    }
+    @Published var selectedWorktree: Worktree? = nil {
+        didSet {
+            persistLastSelection()
+        }
+    }
     @Published var worktrees: [Worktree] = []
     @Published var branches: [String] = []
     @Published var worktreeBasePath: String
-    @Published var defaultEditorId: String
     @Published var defaultCopyPatterns: [CopyPattern]
     @Published var isLoading = false
-    @Published var error: String?
-    @Published var showError = false
-    @Published var lastCopyResult: CopyResult?
 
     // MARK: - Dependencies (internal for extensions)
 
@@ -32,6 +39,14 @@ final class AppStore: ObservableObject {
 
     private let ioQueue = DispatchQueue(label: "worktree-manager.io", qos: .userInitiated)
     var statusRefreshSuppressionUntilByWorktreePath: [String: Date] = [:]
+    private var refreshWorktreesRequestId: UInt64 = 0
+    private var loadBranchesRequestId: UInt64 = 0
+    private var worktreePathByGitWorktreeId: [String: String] = [:]
+
+    private struct LastSelectionSnapshot: Equatable {
+        let repositoryId: UUID?
+        let worktreePath: String?
+    }
 
     // MARK: - Initialization
 
@@ -69,17 +84,19 @@ final class AppStore: ObservableObject {
         self.statusStore = statusStore ?? WorktreeStatusStore()
         self.activityCenter = activityCenter ?? ActivityCenter()
         self.worktreeBasePath = preferences.worktreeBasePath
-        self.defaultEditorId = preferences.defaultEditorId
         self.defaultCopyPatterns = preferences.defaultCopyPatterns
 
         if loadOnInit {
+            let snapshot = LastSelectionSnapshot(
+                repositoryId: preferences.lastSelectedRepositoryId,
+                worktreePath: preferences.lastSelectedWorktreePath
+            )
+
             setupFileSystemWatcher()
 
             // Bootstrap repositories synchronously to avoid a transient empty UI state on app launch.
             repositories = preferences.loadRepositories()
-            if selectedRepository == nil {
-                selectedRepository = repositories.first
-            }
+            selectedRepository = restoredRepository(from: snapshot, repositories: repositories)
             updateWatchedPaths()
 
             // Kick off initial data loading without blocking init.
@@ -87,22 +104,11 @@ final class AppStore: ObservableObject {
                 guard selectedRepository != nil else { return }
                 let token = self.activityCenter.beginGlobal(kind: .initialLoad, message: "Loading workspace…")
                 defer { self.activityCenter.end(token) }
-                await refreshWorktrees()
+                try? await refreshWorktrees()
                 await loadBranches()
+                restoreSelectedWorktree(from: snapshot)
             }
         }
-    }
-
-    // MARK: - Error Handling
-
-    func showError(message: String) {
-        error = message
-        showError = true
-    }
-
-    func clearError() {
-        error = nil
-        showError = false
     }
 
     // MARK: - Internal Helpers
@@ -148,6 +154,26 @@ final class AppStore: ObservableObject {
         fileSystemWatcher.updateWatchedPaths(paths)
     }
 
+    // MARK: - Request Tokens (avoid stale async writes)
+
+    func nextRefreshWorktreesRequestToken() -> UInt64 {
+        refreshWorktreesRequestId &+= 1
+        return refreshWorktreesRequestId
+    }
+
+    func isLatestRefreshWorktreesRequestToken(_ token: UInt64) -> Bool {
+        token == refreshWorktreesRequestId
+    }
+
+    func nextLoadBranchesRequestToken() -> UInt64 {
+        loadBranchesRequestId &+= 1
+        return loadBranchesRequestId
+    }
+
+    func isLatestLoadBranchesRequestToken(_ token: UInt64) -> Bool {
+        token == loadBranchesRequestId
+    }
+
     // MARK: - Private
 
     private func setupFileSystemWatcher() {
@@ -157,41 +183,58 @@ final class AppStore: ObservableObject {
         }
     }
 
-    private func handleFileSystemChange(_ changedPaths: Set<String>) async {
+    // Internal for tests: the file-system watcher invokes this, and unit tests validate its routing logic.
+    func handleFileSystemChange(_ changedPaths: Set<String>) async {
         guard let repo = selectedRepository else { return }
-        guard !changedPaths.isEmpty else {
-            await refreshWorktrees(for: repo)
-            return
-        }
+        guard !changedPaths.isEmpty else { return }
 
         let gitWorktreesPath = "\(repo.path)/.git/worktrees"
         let gitWorktreeChanges = changedPaths.filter { $0.hasPrefix(gitWorktreesPath) }
         let nonGitWorktreeChanges = changedPaths.subtracting(gitWorktreeChanges)
 
         // 1) Changes under `.git/worktrees` are usually status-related (index/refs) and must not force-refresh the whole worktree list.
-        //    We map them to affected worktrees by name and refresh only those statuses.
+        //    We map them to affected worktrees and refresh only those statuses.
         if !gitWorktreeChanges.isEmpty {
-            let names = Set(gitWorktreeChanges.compactMap { Self.extractWorktreeName(fromGitWorktreesPath: $0, gitWorktreesRoot: gitWorktreesPath) })
+            let ids = Set(gitWorktreeChanges.compactMap { Self.extractGitWorktreeId(fromGitWorktreesPath: $0, gitWorktreesRoot: gitWorktreesPath) })
             var matched: [Worktree] = []
             var hasUnknown = false
 
-            for name in names {
-                if let worktree = worktrees.first(where: { $0.name == name }) {
-                    matched.append(worktree)
-                } else {
-                    hasUnknown = true
+            // Some FSEvents configurations can report only the watched root path (or otherwise omit the worktree id).
+            // Treat that as status noise: avoid forcing a full refresh loop that would re-trigger itself via Git writes.
+            if !ids.isEmpty {
+                let worktreesByPath = Dictionary(grouping: worktrees, by: { Self.standardizePath($0.path) })
+                    .compactMapValues { $0.first }
+
+                for id in ids {
+                    guard let worktreePath = resolveWorktreePath(forGitWorktreeId: id, gitWorktreesRoot: gitWorktreesPath) else {
+                        hasUnknown = true
+                        continue
+                    }
+
+                    let standardized = Self.standardizePath(worktreePath)
+                    if let worktree = worktreesByPath[standardized] {
+                        matched.append(worktree)
+                    } else {
+                        hasUnknown = true
+                    }
                 }
-            }
 
-            // If we see a worktree name we don't recognize (created/removed externally), refresh the list once.
-            if hasUnknown || gitWorktreeChanges.contains(gitWorktreesPath) {
-                await refreshWorktrees(for: repo)
-                return
-            }
+                // If we see a git worktree id we don't recognize (created/removed externally), refresh the list once.
+                if hasUnknown {
+                    try? await refreshWorktrees(for: repo)
+                    return
+                }
 
-            let filtered = matched.filter { !shouldSuppressStatusRefresh(forWorktreePath: $0.path) }
-            if !filtered.isEmpty {
-                await refreshStatuses(for: filtered)
+                // If a known worktree disappears on disk, our in-memory list is stale and must be reloaded.
+                if matched.contains(where: { !fileSystem.fileExists(atPath: $0.path) }) {
+                    try? await refreshWorktrees(for: repo)
+                    return
+                }
+
+                let filtered = matched.filter { !shouldSuppressStatusRefresh(forWorktreePath: $0.path) }
+                if !filtered.isEmpty {
+                    await refreshStatuses(for: filtered)
+                }
             }
         }
 
@@ -216,11 +259,57 @@ final class AppStore: ObservableObject {
         return false
     }
 
-    private static func extractWorktreeName(fromGitWorktreesPath path: String, gitWorktreesRoot: String) -> String? {
+    private func resolveWorktreePath(forGitWorktreeId id: String, gitWorktreesRoot: String) -> String? {
+        if let cached = worktreePathByGitWorktreeId[id] {
+            return cached
+        }
+
+        let gitdirPath = "\(gitWorktreesRoot)/\(id)/gitdir"
+        guard let raw = try? fileSystem.readTextFile(atPath: gitdirPath) else { return nil }
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+
+        let worktreePath = (trimmed as NSString).deletingLastPathComponent
+        worktreePathByGitWorktreeId[id] = worktreePath
+        return worktreePath
+    }
+
+    private static func standardizePath(_ path: String) -> String {
+        URL(fileURLWithPath: path)
+            .resolvingSymlinksInPath()
+            .standardizedFileURL
+            .path
+    }
+
+    private static func extractGitWorktreeId(fromGitWorktreesPath path: String, gitWorktreesRoot: String) -> String? {
         guard path.hasPrefix(gitWorktreesRoot) else { return nil }
         let suffix = path.dropFirst(gitWorktreesRoot.count)
         let trimmed = suffix.hasPrefix("/") ? suffix.dropFirst() : suffix[...]
         guard !trimmed.isEmpty else { return nil }
         return trimmed.split(separator: "/").first.map(String.init)
+    }
+
+    private func persistLastSelection() {
+        preferences.lastSelectedRepositoryId = selectedRepository?.id
+        preferences.lastSelectedWorktreePath = selectedWorktree?.path
+    }
+
+    private func restoredRepository(from snapshot: LastSelectionSnapshot, repositories: [Repository]) -> Repository? {
+        if let id = snapshot.repositoryId, let repo = repositories.first(where: { $0.id == id }) {
+            return repo
+        }
+        return repositories.first
+    }
+
+    private func restoreSelectedWorktree(from snapshot: LastSelectionSnapshot) {
+        guard let repo = selectedRepository else { return }
+        guard snapshot.repositoryId == repo.id else { return }
+        guard let path = snapshot.worktreePath else { return }
+
+        if let worktree = worktrees.first(where: { $0.path == path }) {
+            selectedWorktree = worktree
+        } else {
+            selectedWorktree = nil
+        }
     }
 }

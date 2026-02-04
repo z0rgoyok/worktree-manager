@@ -2,7 +2,7 @@ import SwiftUI
 
 /// Repository Header (when project is selected)
 struct RepositoryDetailHeader: View {
-    @EnvironmentObject var store: AppStore
+    @EnvironmentObject var workspace: WorkspaceComponent
     let repository: Repository
 
     var body: some View {
@@ -26,7 +26,7 @@ struct RepositoryDetailHeader: View {
                             .lineLimit(1)
                             .truncationMode(.middle)
 
-                        Text("\(store.worktrees.count) worktree\(store.worktrees.count == 1 ? "" : "s")")
+                        Text("\(workspace.state.worktrees.count) worktree\(workspace.state.worktrees.count == 1 ? "" : "s")")
                             .font(.caption)
                             .foregroundStyle(DS.Colors.textTertiary)
                     }

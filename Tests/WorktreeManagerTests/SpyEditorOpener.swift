@@ -4,6 +4,8 @@ import Foundation
 final class SpyEditorOpener: EditorOpening {
     private(set) var openCalls: [(path: String, editor: Editor)] = []
     var availableEditorsResult: [Editor] = Editor.builtIn
+    var allEditorsResult: [Editor] = Editor.builtIn
+    var installedEditorIds: Set<String> = []
     var openError: Error?
 
     func open(path: String, with editor: Editor) throws {
@@ -14,5 +16,12 @@ final class SpyEditorOpener: EditorOpening {
     func availableEditors() -> [Editor] {
         availableEditorsResult
     }
-}
 
+    func allEditors() -> [Editor] {
+        allEditorsResult
+    }
+
+    func isInstalled(_ editor: Editor) -> Bool {
+        installedEditorIds.contains(editor.id)
+    }
+}
