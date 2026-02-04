@@ -170,6 +170,83 @@ final class AppStoreTests: XCTestCase {
     }
 
     @MainActor
+    func test_archiveRepository_marksRepositoryArchived_andSelectsNextActiveWhenArchivingSelection() async {
+        let repo1 = Repository(id: UUID(uuidString: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")!, path: "/repo-1", name: "Repo 1")
+        let repo2 = Repository(id: UUID(uuidString: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")!, path: "/repo-2", name: "Repo 2")
+
+        let preferences = InMemoryPreferencesStore(worktreeBasePath: "/worktrees")
+        let store = AppStore(
+            git: FakeGitClient(),
+            preferences: preferences,
+            editorOpener: SpyEditorOpener(),
+            fileSystemWatcher: SpyFileSystemWatcher(),
+            fileSystem: FakeFileSystem(existingPaths: ["/worktrees"]),
+            system: SpySystemOpener(),
+            loadOnInit: false
+        )
+        store.repositories = [repo1, repo2]
+        store.selectedRepository = repo1
+
+        await store.archiveRepository(repo1)
+
+        XCTAssertEqual(store.repositories.first(where: { $0.id == repo1.id })?.isArchived, true)
+        XCTAssertEqual(preferences.saveRepositoriesCalls.count, 1)
+        XCTAssertEqual(store.selectedRepository?.id, repo2.id)
+    }
+
+    @MainActor
+    func test_archiveRepository_whenNoActiveRepositories_keepsSelectionButUpdatesItsArchivedState() async {
+        let repo = Repository(id: UUID(uuidString: "cccccccc-cccc-cccc-cccc-cccccccccccc")!, path: "/repo", name: "Repo")
+        let preferences = InMemoryPreferencesStore(worktreeBasePath: "/worktrees")
+        let store = AppStore(
+            git: FakeGitClient(),
+            preferences: preferences,
+            editorOpener: SpyEditorOpener(),
+            fileSystemWatcher: SpyFileSystemWatcher(),
+            fileSystem: FakeFileSystem(existingPaths: ["/worktrees"]),
+            system: SpySystemOpener(),
+            loadOnInit: false
+        )
+        store.repositories = [repo]
+        store.selectedRepository = repo
+
+        await store.archiveRepository(repo)
+
+        XCTAssertEqual(store.repositories.first?.isArchived, true)
+        XCTAssertEqual(store.selectedRepository?.id, repo.id)
+        XCTAssertEqual(store.selectedRepository?.isArchived, true)
+    }
+
+    @MainActor
+    func test_restoreRepository_updatesRepositoryAndSelectionState() async {
+        let repo = Repository(
+            id: UUID(uuidString: "dddddddd-dddd-dddd-dddd-dddddddddddd")!,
+            path: "/repo",
+            name: "Repo",
+            isArchived: true
+        )
+
+        let preferences = InMemoryPreferencesStore(worktreeBasePath: "/worktrees")
+        let store = AppStore(
+            git: FakeGitClient(),
+            preferences: preferences,
+            editorOpener: SpyEditorOpener(),
+            fileSystemWatcher: SpyFileSystemWatcher(),
+            fileSystem: FakeFileSystem(existingPaths: ["/worktrees"]),
+            system: SpySystemOpener(),
+            loadOnInit: false
+        )
+        store.repositories = [repo]
+        store.selectedRepository = repo
+
+        await store.restoreRepository(repo)
+
+        XCTAssertEqual(store.repositories.first?.isArchived, false)
+        XCTAssertEqual(store.selectedRepository?.id, repo.id)
+        XCTAssertEqual(store.selectedRepository?.isArchived, false)
+    }
+
+    @MainActor
     func test_createWorktree_buildsPath_createsDirectory_andCallsGit() async throws {
         let repo = Repository(path: "/repo", name: "repo")
         let preferences = InMemoryPreferencesStore(worktreeBasePath: "/worktrees")

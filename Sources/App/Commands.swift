@@ -30,6 +30,23 @@ struct WorktreeCommands: Commands {
             }
 
             Section {
+                if let repo = workspace.state.selectedRepository {
+                    if repo.isArchived {
+                        Button("Restore Project") {
+                            Task { await workspace.restoreRepository(repo) }
+                        }
+                    } else {
+                        Button("Archive Project") {
+                            Task { await workspace.archiveRepository(repo) }
+                        }
+                    }
+                } else {
+                    Button("Archive Project") {}
+                        .disabled(true)
+                }
+            }
+
+            Section {
                 Button("Refresh All") {
                     workspace.send(.refresh, root: root)
                 }

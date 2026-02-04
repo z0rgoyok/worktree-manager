@@ -8,6 +8,7 @@ struct ProjectTreeSidebar: View {
     @Binding var selection: SidebarSelection?
     @State private var expandedRepositories: Set<UUID> = []
     @State private var pendingExpandedRepositoryIds: Set<UUID> = []
+    @State private var isArchivedSectionExpanded: Bool = false
     @State private var repositoryForCopySettings: Repository?
     @State private var worktreesCache: [UUID: [Worktree]] = [:]  // repo.id -> worktrees
     @State private var loadingRepositories: Set<UUID> = []
@@ -42,7 +43,7 @@ struct ProjectTreeSidebar: View {
                 restoreExpandedRepositoriesIfNeeded()
                 initializeSelection()
                 isKeyboardFocused = true
-                scheduleBackgroundPrefetch(for: workspace.state.repositories)
+                scheduleBackgroundPrefetch(for: activeRepositories)
             }
             .onChange(of: expandedRepositories) { _, expanded in
                 workspace.setExpandedRepositoryIds(expanded)
@@ -56,7 +57,7 @@ struct ProjectTreeSidebar: View {
                     expandedRepositories = filtered
                 }
                 restoreExpandedRepositoriesIfNeeded()
-                scheduleBackgroundPrefetch(for: repos)
+                scheduleBackgroundPrefetch(for: activeRepositories)
 
                 if selection == nil, let repo = workspace.state.selectedRepository {
                     selection = .repository(repo)
@@ -67,6 +68,7 @@ struct ProjectTreeSidebar: View {
                 if let repo = repo, selection?.repository.id != repo.id {
                     selection = .repository(repo)
                 }
+                ensureArchivedSectionVisibility(for: selection)
             }
             .onChange(of: workspace.state.worktrees) { _, worktrees in
                 // Sync worktrees cache for selected repository
@@ -86,7 +88,23 @@ struct ProjectTreeSidebar: View {
                         loadWorktrees(for: sel.repository)
                     }
                 }
+                ensureArchivedSectionVisibility(for: newSelection)
             }
+    }
+
+    private var activeRepositories: [Repository] {
+        workspace.state.repositories.filter { !$0.isArchived }
+    }
+
+    private var archivedRepositories: [Repository] {
+        workspace.state.repositories.filter { $0.isArchived }
+    }
+
+    private var visibleRepositories: [Repository] {
+        if isArchivedSectionExpanded {
+            return activeRepositories + archivedRepositories
+        }
+        return activeRepositories
     }
 
     @ViewBuilder
@@ -160,9 +178,10 @@ struct ProjectTreeSidebar: View {
     }
 
     private var shouldCollapseAllRepositories: Bool {
-        let repos = workspace.state.repositories
+        let repos = visibleRepositories
         guard !repos.isEmpty else { return false }
-        return expandedRepositories.count == repos.count
+        let visibleIds = Set(repos.map(\.id))
+        return expandedRepositories.intersection(visibleIds).count == visibleIds.count
     }
 
     private var emptyState: some View {
@@ -202,7 +221,7 @@ struct ProjectTreeSidebar: View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(spacing: 0) {
-                    ForEach(workspace.state.repositories) { repo in
+                    ForEach(activeRepositories) { repo in
                         ProjectTreeNode(
                             repository: repo,
                             selection: $selection,
@@ -213,6 +232,24 @@ struct ProjectTreeSidebar: View {
                         )
                         .id(AnyHashable(repo.id))
                     }
+
+                    if !archivedRepositories.isEmpty {
+                        archivedSectionHeader
+
+                        if isArchivedSectionExpanded {
+                            ForEach(archivedRepositories) { repo in
+                                ProjectTreeNode(
+                                    repository: repo,
+                                    selection: $selection,
+                                    isExpanded: expansionBinding(for: repo),
+                                    worktrees: worktrees(for: repo),
+                                    isLoadingWorktrees: isLoading(repo: repo),
+                                    onCopySettings: { repositoryForCopySettings = repo }
+                                )
+                                .id(AnyHashable(repo.id))
+                            }
+                        }
+                    }
                 }
                 .padding(.vertical, DS.Spacing.xs)
             }
@@ -221,6 +258,53 @@ struct ProjectTreeSidebar: View {
                 proxy.scrollTo(scrollId(for: newSelection), anchor: .center)
             }
         }
+    }
+
+    private var archivedSectionHeader: some View {
+        Button {
+            if isArchivedSectionExpanded, isSelectionWithinArchivedSection {
+                return
+            }
+            withAnimation(DS.Animation.quick) {
+                isArchivedSectionExpanded.toggle()
+            }
+        } label: {
+            HStack(spacing: DS.Spacing.xs) {
+                Image(systemName: isArchivedSectionExpanded ? "chevron.down" : "chevron.right")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(DS.Colors.textTertiary)
+                    .frame(width: DS.Sizes.treeIconSize, height: DS.Sizes.treeIconSize)
+
+                Image(systemName: "archivebox")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(DS.Colors.textTertiary)
+                    .frame(width: DS.Sizes.treeIconSize)
+
+                Text("Archived")
+                    .font(DS.Typography.sectionHeader)
+                    .foregroundStyle(DS.Colors.textSecondary)
+
+                Spacer()
+
+                Text("\(archivedRepositories.count)")
+                    .font(DS.Typography.badge)
+                    .foregroundStyle(DS.Colors.textSecondary)
+                    .padding(.horizontal, DS.Spacing.xs)
+                    .padding(.vertical, DS.Spacing.xxxs)
+                    .background(DS.Colors.surfaceSecondary)
+                    .cornerRadius(DS.Radius.xs)
+            }
+            .padding(.horizontal, DS.Spacing.md)
+            .padding(.vertical, DS.Spacing.sm)
+            .frame(height: DS.Sizes.treeRowHeight)
+            .background(DS.Colors.surfacePrimary)
+            .cornerRadius(DS.Radius.sm)
+            .padding(.horizontal, DS.Spacing.xs)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(isArchivedSectionExpanded ? "Hide archived projects" : "Show archived projects")
+        .padding(.top, DS.Spacing.xs)
     }
 
     private var sidebarToolbar: some ToolbarContent {
@@ -336,12 +420,15 @@ struct ProjectTreeSidebar: View {
             if worktreesCache[sel.repository.id] == nil {
                 loadWorktrees(for: sel.repository)
             }
+            ensureArchivedSectionVisibility(for: sel)
             return
         }
 
         if let repo = workspace.state.selectedRepository {
             selection = .repository(repo)
         }
+
+        ensureArchivedSectionVisibility(for: selection)
     }
 
     private func restoreExpandedRepositories() {
@@ -380,7 +467,7 @@ struct ProjectTreeSidebar: View {
                 return
             }
 
-            expandedRepositories = Set(workspace.state.repositories.map(\.id))
+            expandedRepositories = Set(visibleRepositories.map(\.id))
         }
 
         ensureWorktreesLoadedForExpandedRepositories()
@@ -392,7 +479,7 @@ struct ProjectTreeSidebar: View {
         let output = SidebarKeyboardNavigation.handle(
             key: key,
             selection: selection,
-            repositories: workspace.state.repositories,
+            repositories: visibleRepositories,
             expandedRepositoryIds: expandedRepositories,
             worktreesByRepositoryId: worktreesCache
         )
@@ -467,6 +554,20 @@ struct ProjectTreeSidebar: View {
                 await Task.yield()
             }
         }
+    }
+
+    private func ensureArchivedSectionVisibility(for selection: SidebarSelection?) {
+        guard let selection else { return }
+        guard let repo = workspace.state.repositories.first(where: { $0.id == selection.repository.id }) else { return }
+        if repo.isArchived, !isArchivedSectionExpanded {
+            isArchivedSectionExpanded = true
+        }
+    }
+
+    private var isSelectionWithinArchivedSection: Bool {
+        guard let selection else { return false }
+        guard let repo = workspace.state.repositories.first(where: { $0.id == selection.repository.id }) else { return false }
+        return repo.isArchived
     }
 }
 

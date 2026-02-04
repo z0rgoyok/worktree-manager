@@ -56,6 +56,36 @@ extension AppStore {
         }
     }
 
+    func archiveRepository(_ repo: Repository) async {
+        await setRepositoryArchived(repo, isArchived: true)
+    }
+
+    func restoreRepository(_ repo: Repository) async {
+        await setRepositoryArchived(repo, isArchived: false)
+    }
+
+    private func setRepositoryArchived(_ repo: Repository, isArchived: Bool) async {
+        guard let index = repositories.firstIndex(where: { $0.id == repo.id }) else { return }
+        guard repositories[index].isArchived != isArchived else { return }
+
+        var updated = repositories[index]
+        updated.isArchived = isArchived
+        repositories[index] = updated
+        preferences.saveRepositories(repositories)
+
+        if selectedRepository?.id == repo.id {
+            if isArchived {
+                if let nextActive = repositories.first(where: { !$0.isArchived }) {
+                    try? await selectRepository(nextActive)
+                } else {
+                    selectedRepository = updated
+                }
+            } else {
+                selectedRepository = updated
+            }
+        }
+    }
+
     func selectRepository(_ repo: Repository) async throws {
         selectedRepository = repo
         selectedWorktree = nil

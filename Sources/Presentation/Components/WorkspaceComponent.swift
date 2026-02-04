@@ -150,6 +150,14 @@ final class WorkspaceComponent: ObservableObject {
         await store.removeRepository(repo)
     }
 
+    func archiveRepository(_ repo: Repository) async {
+        await store.archiveRepository(repo)
+    }
+
+    func restoreRepository(_ repo: Repository) async {
+        await store.restoreRepository(repo)
+    }
+
     func completeWorktree(_ worktree: Worktree, options: CompleteWorktreeOptions) async {
         do {
             try await store.completeWorktree(worktree, options: options)
