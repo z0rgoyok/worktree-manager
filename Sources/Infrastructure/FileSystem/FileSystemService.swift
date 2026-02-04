@@ -54,5 +54,8 @@ final class FileSystemService: FileSystemHandling {
         }
         return totalSize
     }
-}
 
+    func readTextFile(atPath path: String) throws -> String {
+        try String(contentsOfFile: path, encoding: .utf8)
+    }
+}

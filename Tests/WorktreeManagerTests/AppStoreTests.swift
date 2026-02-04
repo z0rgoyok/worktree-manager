@@ -587,4 +587,140 @@ final class AppStoreTests: XCTestCase {
 
         XCTAssertEqual(store.branches, ["main-2", "feature-2"])
     }
+
+    @MainActor
+    func test_handleFileSystemChange_gitWorktreesRootOnly_doesNotForceRefreshLoop() async {
+        let repo = Repository(path: "/repo", name: "repo")
+        let preferences = InMemoryPreferencesStore(worktreeBasePath: "/worktrees")
+
+        let git = FakeGitClient()
+        var listWorktreesCalls = 0
+        var statusCalls = 0
+        git.listWorktreesHandler = { _ in
+            listWorktreesCalls += 1
+            return []
+        }
+        git.getWorktreeStatusHandler = { path in
+            statusCalls += 1
+            return WorktreeStatus(isDirty: false, hasRemote: true, ahead: 0, behind: 0, prStatus: nil)
+        }
+
+        let store = AppStore(
+            git: git,
+            preferences: preferences,
+            editorOpener: SpyEditorOpener(),
+            fileSystemWatcher: SpyFileSystemWatcher(),
+            fileSystem: FakeFileSystem(existingPaths: ["/worktrees", "/repo/.git/worktrees"]),
+            system: SpySystemOpener(),
+            loadOnInit: false
+        )
+        store.selectedRepository = repo
+        store.worktrees = [Worktree(path: "/worktrees/repo/feature", branch: "feature")]
+
+        await store.handleFileSystemChange(["/repo/.git/worktrees"])
+
+        XCTAssertEqual(listWorktreesCalls, 0)
+        XCTAssertEqual(statusCalls, 0)
+    }
+
+    @MainActor
+    func test_handleFileSystemChange_gitWorktreesUnknownName_refreshesWorktrees() async {
+        let repo = Repository(path: "/repo", name: "repo")
+        let preferences = InMemoryPreferencesStore(worktreeBasePath: "/worktrees")
+
+        let git = FakeGitClient()
+        var listWorktreesCalls = 0
+        git.listWorktreesHandler = { _ in
+            listWorktreesCalls += 1
+            return []
+        }
+        git.listBranchesHandler = { _ in [] }
+
+        let store = AppStore(
+            git: git,
+            preferences: preferences,
+            editorOpener: SpyEditorOpener(),
+            fileSystemWatcher: SpyFileSystemWatcher(),
+            fileSystem: FakeFileSystem(existingPaths: ["/worktrees", "/repo/.git/worktrees"]),
+            system: SpySystemOpener(),
+            loadOnInit: false
+        )
+        store.selectedRepository = repo
+        store.worktrees = [Worktree(path: "/worktrees/repo/known", branch: "known")]
+
+        await store.handleFileSystemChange(["/repo/.git/worktrees/unknown/HEAD"])
+
+        XCTAssertEqual(listWorktreesCalls, 1)
+    }
+
+    @MainActor
+    func test_handleFileSystemChange_gitWorktreesKnownName_missingWorktreePath_refreshesWorktrees() async {
+        let repo = Repository(path: "/repo", name: "repo")
+        let preferences = InMemoryPreferencesStore(worktreeBasePath: "/worktrees")
+
+        let git = FakeGitClient()
+        var listWorktreesCalls = 0
+        git.listWorktreesHandler = { _ in
+            listWorktreesCalls += 1
+            return []
+        }
+        git.listBranchesHandler = { _ in [] }
+
+        let fileSystem = FakeFileSystem(existingPaths: ["/worktrees", "/repo/.git/worktrees"])
+        fileSystem.textFiles["/repo/.git/worktrees/feature/gitdir"] = "/worktrees/repo/feature/.git\n"
+        let store = AppStore(
+            git: git,
+            preferences: preferences,
+            editorOpener: SpyEditorOpener(),
+            fileSystemWatcher: SpyFileSystemWatcher(),
+            fileSystem: fileSystem,
+            system: SpySystemOpener(),
+            loadOnInit: false
+        )
+        store.selectedRepository = repo
+        store.worktrees = [Worktree(path: "/worktrees/repo/feature", branch: "feature")]
+
+        await store.handleFileSystemChange(["/repo/.git/worktrees/feature/HEAD"])
+
+        XCTAssertEqual(listWorktreesCalls, 1)
+    }
+
+    @MainActor
+    func test_handleFileSystemChange_gitWorktreesKnownName_existingWorktreePath_refreshesStatusOnly() async {
+        let repo = Repository(path: "/repo", name: "repo")
+        let preferences = InMemoryPreferencesStore(worktreeBasePath: "/worktrees")
+
+        let git = FakeGitClient()
+        var listWorktreesCalls = 0
+        var statusCalls = 0
+        git.listWorktreesHandler = { _ in
+            listWorktreesCalls += 1
+            return []
+        }
+        git.getWorktreeStatusHandler = { _ in
+            statusCalls += 1
+            return WorktreeStatus(isDirty: true, hasRemote: true, ahead: 1, behind: 0, prStatus: nil)
+        }
+
+        let fileSystem = FakeFileSystem(existingPaths: ["/worktrees", "/repo/.git/worktrees", "/worktrees/repo/feature"])
+        fileSystem.textFiles["/repo/.git/worktrees/feature/gitdir"] = "/worktrees/repo/feature/.git\n"
+        let store = AppStore(
+            git: git,
+            preferences: preferences,
+            editorOpener: SpyEditorOpener(),
+            fileSystemWatcher: SpyFileSystemWatcher(),
+            fileSystem: fileSystem,
+            system: SpySystemOpener(),
+            loadOnInit: false
+        )
+        store.selectedRepository = repo
+        let worktree = Worktree(path: "/worktrees/repo/feature", branch: "feature")
+        store.worktrees = [worktree]
+
+        await store.handleFileSystemChange(["/repo/.git/worktrees/feature/HEAD"])
+
+        XCTAssertEqual(listWorktreesCalls, 0)
+        XCTAssertEqual(statusCalls, 1)
+        XCTAssertEqual(store.getStatus(for: worktree)?.ahead, 1)
+    }
 }
